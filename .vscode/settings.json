@@ -1,0 +1,25 @@
+{
+  "solidity.compileUsingLocalVersion": "/Users/juglipaff/Desktop/Projects/O1Markets/O1-Markets/soljson-v0.8.34+commit.80d5c536.js",
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "[solidity]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "prettier.requireConfig": true,
+  "prettier.useEditorConfig": false,
+  "solidity.remappings": [
+    "forge-std/=lib/forge-std/src/",
+    "@openzeppelin/=node_modules/@openzeppelin/",
+    "@pythnetwork/=node_modules/@pythnetwork/",
+    "@uniswap/=node_modules/@uniswap/",
+    "@synthetixio/=node_modules/@synthetixio/",
+    "@prb/=node_modules/@prb/",
+    "@noble/=node_modules/@noble/",
+    "@kevincharm/=node_modules/@kevincharm/",
+    "abdk-libraries-solidity/=node_modules/abdk-libraries-solidity/",
+    "base64-sol/=node_modules/base64-sol/"
+  ],
+  "solidity.compileUsingRemoteVersion": "v0.8.33+commit.64118f21",
+  "solidity.defaultCompiler": "localFile"
+}
