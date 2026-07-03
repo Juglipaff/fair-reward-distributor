@@ -4,13 +4,10 @@ pragma solidity ^0.8.0;
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-//TODO; vault wrapper?
-//TODO: upgradeable?
-
 /**
  * @title FairRewardDistributor
- * @author Ivan Menshchikov | https://github.com/Juglipaff.
- *      Algorithm co-authored with Roman Vinogradov;  See https://juglipaff.github.io/Token-Distribution-Algorithm/
+ * @author Ivan Menshchikov (https://github.com/Juglipaff).
+ *      Algorithm co-authored with Roman Vinogradov. See https://juglipaff.github.io/Token-Distribution-Algorithm/
  * @dev Constant-gas, front-run-resistant on-chain reward distribution using deposit-age weighting.
  *      A user's reward is proportional to (stake × time-in-pool). Every operation is O(1)
  *      regardless of participant count or number of past distributions, achieved by storing a
