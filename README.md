@@ -72,11 +72,29 @@ Every user-facing operation — `stake`, `withdraw`, `distribute`, reward query 
 
 ## Usage
 
-Install:
+### Install
+
+**Foundry** (git submodule):
+
+```bash
+forge install Juglipaff/fair-reward-distributor
+```
+
+Then add to `remappings.txt`:
+
+```
+@juglipaff/fair-reward-distributor/=lib/fair-reward-distributor/
+```
+
+**npm** (Hardhat, Truffle, or any Node-based toolchain):
 
 ```bash
 npm install @juglipaff/fair-reward-distributor
 ```
+
+The package ships the Solidity sources under `src/` and a `remappings.txt` you can include from your own.
+
+### Integration
 
 Extend the abstract contract and implement six hooks. The example below wraps a single ERC-20 as both stake and reward token, and demonstrates the `recipient` / `user` distinction — the caller can stake *on behalf of* another account and withdraw *to* an arbitrary address.
 
