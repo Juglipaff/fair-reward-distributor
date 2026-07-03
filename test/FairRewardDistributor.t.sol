@@ -26,23 +26,8 @@ contract FairRewardDistributorTest is Test {
     ///     touching the block 0 edge case.
     uint256 internal constant GENESIS_BLOCK = 1_000_000;
 
-    ///@dev Fixed-point scale factor mirroring the src DENOMINATOR constant.
-    uint256 internal constant DENOMINATOR = type(uint64).max;
-
-    // ============ Internal Pure Functions ============
-
-    /**
-     * @dev Strict upper bound on rounding loss for a single user over a single distribution.
-     *      Derivation: `R_pSA = floor(reward * D / total_stakeAge)` loses a fractional `f ∈ [0,1)`.
-     *      Per-user `mulDiv(stakeAge_u, R_pSA, D)` loses another `< 1` wei. Composed:
-     *      `loss < stakeAge_u * f / D + 1 < stakeAge_u / D + 1`.
-     * @param stake User's stake for the interval.
-     * @param blocks Number of blocks the user held that stake before the distribution.
-     * @return Upper bound in wei.
-     */
-    function _lossBound(uint256 stake, uint256 blocks) internal pure returns (uint256) {
-        return (stake * blocks) / DENOMINATOR + 1;
-    }
+    ///@dev Relative-error tolerance for reward assertions, in wad (1e18 = 100%). 1e18 = 0.000000000001%.
+    uint256 internal constant REWARD_TOLERANCE = 1e18;
 
     // ============ Setup ============
 
@@ -163,10 +148,8 @@ contract FairRewardDistributorTest is Test {
         harness.distribute(10 ether);
 
         uint256 reward = harness.userReward(alice);
-        uint256 bound = _lossBound(100 ether, 10);
-
         assertLe(reward, 10 ether); // never over-pays
-        assertGe(reward, 10 ether - bound); // within closed-form rounding budget
+        assertApproxEqRel(reward, 10 ether, REWARD_TOLERANCE);
     }
 
     function test_Distribute_TwoUsersEqualStakeEqualTime_HalfEach() public {
@@ -177,12 +160,11 @@ contract FairRewardDistributorTest is Test {
 
         uint256 aliceReward = harness.userReward(alice);
         uint256 bobReward = harness.userReward(bob);
-        uint256 bound = _lossBound(100 ether, 10);
 
         assertLe(aliceReward, 5 ether);
-        assertGe(aliceReward, 5 ether - bound);
+        assertApproxEqRel(aliceReward, 5 ether, REWARD_TOLERANCE);
         assertLe(bobReward, 5 ether);
-        assertGe(bobReward, 5 ether - bound);
+        assertApproxEqRel(bobReward, 5 ether, REWARD_TOLERANCE);
     }
 
     function test_Distribute_TwoUsersEqualStakeDifferentTime_EarlierGetsMore() public {
@@ -197,16 +179,14 @@ contract FairRewardDistributorTest is Test {
 
         uint256 aliceReward = harness.userReward(alice);
         uint256 aliceExpected = (uint256(10 ether) * 200) / 300;
-        uint256 aliceBound = _lossBound(100 ether, 200);
 
         uint256 bobExpected = (uint256(10 ether) * 100) / 300;
-        uint256 bobBound = _lossBound(100 ether, 100);
         uint256 bobReward = harness.userReward(bob);
 
         assertLe(aliceReward, aliceExpected);
-        assertGe(aliceReward, aliceExpected - aliceBound);
+        assertApproxEqRel(aliceReward, aliceExpected, REWARD_TOLERANCE);
         assertLe(bobReward, bobExpected);
-        assertGe(bobReward, bobExpected - bobBound);
+        assertApproxEqRel(bobReward, bobExpected, REWARD_TOLERANCE);
     }
 
     function test_Distribute_TwoUsersDifferentStakeSameTime_ProportionalToStake() public {
@@ -216,16 +196,13 @@ contract FairRewardDistributorTest is Test {
         harness.distribute(4 ether);
 
         uint256 aliceReward = harness.userReward(alice);
-        uint256 aliceBound = _lossBound(100 ether, 10);
-
         uint256 bobReward = harness.userReward(bob);
-        uint256 bobBound = _lossBound(300 ether, 10);
 
         // total stakeAge = 400e * 10; Alice share = 100/400; Bob share = 300/400.
         assertLe(aliceReward, 1 ether);
-        assertGe(aliceReward, 1 ether - aliceBound);
+        assertApproxEqRel(aliceReward, 1 ether, REWARD_TOLERANCE);
         assertLe(bobReward, 3 ether);
-        assertGe(bobReward, 3 ether - bobBound);
+        assertApproxEqRel(bobReward, 3 ether, REWARD_TOLERANCE);
     }
 
     function test_Distribute_MultipleDistributions_UserInactive_AccumulatesAll() public {
@@ -240,13 +217,10 @@ contract FairRewardDistributorTest is Test {
         vm.roll(GENESIS_BLOCK + 30);
         harness.distribute(3 ether);
 
-        // Alice is the sole staker across all three intervals of 10 blocks each. Per-distribution
-        // loss bound compounds linearly.
+        // Alice is the sole staker across all three intervals of 10 blocks each.
         uint256 reward = harness.userReward(alice);
-        uint256 totalBound = _lossBound(100 ether, 10) * 3;
-
         assertLe(reward, 15 ether);
-        assertGe(reward, 15 ether - totalBound);
+        assertApproxEqRel(reward, 15 ether, REWARD_TOLERANCE);
     }
 
     // ============ Distribute — reverts ============
@@ -293,10 +267,8 @@ contract FairRewardDistributorTest is Test {
         vm.roll(GENESIS_BLOCK + 30);
 
         uint256 reward = harness.userReward(alice);
-        uint256 lossBound = _lossBound(100 ether, 10);
-
         assertLe(reward, 10 ether);
-        assertGt(reward, 10 ether - lossBound);
+        assertApproxEqRel(reward, 10 ether, REWARD_TOLERANCE);
     }
 
     // ============ Withdraw from realized reward ============
@@ -318,10 +290,9 @@ contract FairRewardDistributorTest is Test {
 
         uint256 stakeBefore = harness.userStake(alice);
         uint256 rewardBefore = harness.userReward(alice);
-        uint256 lossBound = _lossBound(100 ether, 30);
 
-        assertLt(rewardBefore, 15 ether);
-        assertGt(rewardBefore, 15 ether - lossBound);
+        assertLe(rewardBefore, 15 ether);
+        assertApproxEqRel(rewardBefore, 15 ether, REWARD_TOLERANCE);
 
         harness.withdraw(1 ether, alice, alice);
 
@@ -329,7 +300,6 @@ contract FairRewardDistributorTest is Test {
         assertEq(harness.userReward(alice), rewardBefore - 1 ether);
     }
 
-    //TODO
     function test_Withdraw_MixedRewardAndStake_DrainsRewardFirst() public {
         harness.stake(100 ether, alice);
         vm.roll(GENESIS_BLOCK + 10);
