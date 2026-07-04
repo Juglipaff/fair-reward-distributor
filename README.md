@@ -3,7 +3,7 @@
 [![release](https://img.shields.io/github/v/release/Juglipaff/fair-reward-distributor?sort=semver)](https://github.com/Juglipaff/fair-reward-distributor/releases)
 [![npm](https://img.shields.io/npm/v/@juglipaff/fair-reward-distributor.svg)](https://www.npmjs.com/package/@juglipaff/fair-reward-distributor)
 [![coverage](https://coveralls.io/repos/github/Juglipaff/fair-reward-distributor/badge.svg?branch=main)](https://coveralls.io/github/Juglipaff/fair-reward-distributor?branch=main)
-[![license](https://img.shields.io/npm/l/@juglipaff/fair-reward-distributor.svg)](./LICENSE)
+[![license](https://img.shields.io/github/license/Juglipaff/fair-reward-distributor.svg)](./LICENSE)
 
 > [!CAUTION]
 > This code has **not** been audited. Use at your own risk. No warranty is provided, express or implied. Do not deploy to production without an independent security review.
