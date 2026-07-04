@@ -92,7 +92,7 @@ abstract contract FairRewardDistributor {
      * @param requested Amount requested.
      * @param actual Amount available.
      */
-    error InsufficientBalance(uint256 needed, uint256 actual);
+    error InsufficientBalance(uint256 requested, uint256 actual);
 
     /**
      * @dev Thrown when distribution is called before any positive total stake-age has accrued,

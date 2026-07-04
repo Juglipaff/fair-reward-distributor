@@ -1,0 +1,65 @@
+name: Bug report
+description: Report incorrect on-chain behavior, a failing test, or unexpected revert.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please note: **do not** file security-relevant issues here — email juglipaff@gmail.com instead.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One-sentence description of the problem.
+      placeholder: e.g. `_userReward` returns stale value after distribution when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Minimal steps or Foundry test that reproduces the bug. Prefer a failing test.
+      render: solidity
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include revert reason, wrong return value, gas explosion, etc.
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit / version
+      description: Git SHA, tag, or npm version being tested against.
+      placeholder: e.g. main@abc1234, or v1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: foundry
+    attributes:
+      label: Foundry version
+      description: Output of `forge --version`.
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional context
+      description: Anything else — related issues, hypotheses, links.

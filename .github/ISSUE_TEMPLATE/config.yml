@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: mailto:juglipaff@gmail.com
+    about: Report security issues privately by email. Do not file a public issue.
+  - name: Question / discussion
+    url: https://github.com/Juglipaff/fair-reward-distributor/discussions
+    about: For open-ended questions, algorithm discussion, or usage help.
