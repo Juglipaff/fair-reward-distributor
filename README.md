@@ -42,7 +42,7 @@ On every distribution at index `d`, the contract records:
 - $rewardPerStakeAge[d] = reward / distributionStakeAge$
 - $cumRewardAgePerStakeAge[d] = cumRewardAgePerStakeAge[d-1] + rewardPerStakeAge[d] \times (block[d] - block[d-1])$
 
-The second field is a running prefix sum of reward-per-stake-age integrated over blocks, across every distribution so far. The key insight is that if a user's stake stays constant across distributions `a+1..b`, their total owed reward across that run is $stake \times \sum_{i=a+1}^{b} (rewardPerStakeAge[i] \times (block[i] - block[i-1]))$ - exactly the increments folded into `cumRewardAgePerStakeAge`. Subtracting two snapshots of that prefix sum recovers any range, so the whole sum equals $stake \times (cumRewardAgePerStakeAge[b] - cumRewardAgePerStakeAge[a])$. Thus, an arbitrary number of distributions collapses to O(1) work.
+The second field is a running prefix sum of reward-per-stake-age integrated over blocks, across every distribution so far. The key insight is that if a user's stake stays constant across distributions $[a+1..b]$, their total owed reward across that run is $stake \times \sum_{i=a+1}^{b} (rewardPerStakeAge[i] \times (block[i] - block[i-1]))$ - exactly the increments folded into `cumRewardAgePerStakeAge`. Subtracting two snapshots of that prefix sum recovers any range, so the whole sum equals $stake \times (cumRewardAgePerStakeAge[b] - cumRewardAgePerStakeAge[a])$. Thus, an arbitrary number of distributions collapses to O(1) work.
 
 Each user stores:
 
@@ -51,7 +51,7 @@ Each user stores:
 - `stakeAge` - stake-age accumulated across the user's actions within the interval they haven't yet been settled through
 - `stake`, `reward`
 
-Owed reward is then a subtraction of two prefix-sum snapshots covering the block range `(block[user.lastDistributionId], block[latestDistributionId]]`, plus a partial term for `(user.lastUpdateBlock, block[user.lastDistributionId]]` - the interval between the user's last action and the next distribution that closed after it. That partial is just the user's stake-age over the range multiplied by `rewardPerStakeAge` at `user.lastDistributionId`, which every distribution stores. Each of the three terms is O(1) to compute, so any user's owed reward is O(1) at any moment. 
+Owed reward is then a subtraction of two prefix-sum snapshots covering the block range $(block[user.lastDistributionId], block[latestDistributionId]]$, plus a partial term for $(user.lastUpdateBlock, block[user.lastDistributionId]]$ - the interval between the user's last action and the next distribution that closed after it. That partial is just the user's stake-age over the range multiplied by `rewardPerStakeAge` at `user.lastDistributionId`, which every distribution stores. Each of the three terms is O(1) to compute, so any user's owed reward is O(1) at any moment. 
 
 On every user action (stake or withdraw), the owed reward is collapsed into the stored `reward`, and `stake` / `stakeAge` / `lastDistributionId` / `lastUpdateBlock` are re-anchored to the current state, turning a sequence of stakes and withdrawals into a chain of O(1) settlements, accumulating `stakeAge` within an inter-distribution window and resetting it across window boundaries. Re-anchoring thus preserves the invariant that the stake was constant across the range being summed. No loop over users, no loop over distributions.
 
