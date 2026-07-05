@@ -26,8 +26,8 @@ contract FairRewardDistributorTest is Test {
     ///     touching the block 0 edge case.
     uint256 internal constant GENESIS_BLOCK = 1_000_000;
 
-    ///@dev Relative-error tolerance for reward assertions, in wad (1e18 = 100%). 1e18 = 0.000000000001%.
-    uint256 internal constant REWARD_TOLERANCE = 1e18;
+    ///@dev Relative-error tolerance for reward assertions, in wad (1e18 = 100%). 1e2 = 0.00000000000001%.
+    uint256 internal constant REWARD_TOLERANCE = 1e2;
 
     // ============ Setup ============
 
@@ -216,6 +216,37 @@ contract FairRewardDistributorTest is Test {
         uint256 reward = harness.userReward(alice);
         assertLe(reward, 15 ether);
         assertApproxEqRel(reward, 15 ether, REWARD_TOLERANCE);
+    }
+
+    function test_Distribute_StakeAgeAccumulatesAcrossCycles_ProportionalShare() public {
+        uint128 X = 100 ether;
+        uint64 t = 10;
+
+        harness.stake(X, alice);
+        vm.roll(GENESIS_BLOCK + t);
+        harness.withdraw(X, alice, alice);
+
+        harness.stake(X, alice);
+        vm.roll(GENESIS_BLOCK + 2 * t);
+        harness.withdraw(X, alice, alice);
+
+        harness.stake(X, alice);
+        vm.roll(GENESIS_BLOCK + 3 * t);
+        harness.withdraw(X, alice, alice);
+
+        harness.stake(X, bob);
+        vm.roll(GENESIS_BLOCK + 4 * t);
+        harness.withdraw(X, bob, bob);
+
+        harness.distribute(4 ether);
+
+        uint256 aliceReward = harness.userReward(alice);
+        uint256 bobReward = harness.userReward(bob);
+
+        assertLe(aliceReward, 3 ether);
+        assertApproxEqRel(aliceReward, 3 ether, REWARD_TOLERANCE);
+        assertLe(bobReward, 1 ether);
+        assertApproxEqRel(bobReward, 1 ether, REWARD_TOLERANCE);
     }
 
     // ============ Distribute — reverts ============

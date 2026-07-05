@@ -63,10 +63,10 @@ abstract contract FairRewardDistributor {
 
     ///@dev Sum of all users' current stakes.
     uint128 private __totalStake;
-    ///@dev Block number at which pool-level state (__totalStake, _totalStakeAge) was last updated.
+    ///@dev Block number at which pool-level state (__totalStake, _distributionStakeAge) was last updated.
     uint128 private _lastUpdateBlock;
     ///@dev Accumulated (__totalStake × block-delta) since the previous distribution. Consumed and reset to zero on each distribution.
-    uint192 private _totalStakeAge;
+    uint192 private _distributionStakeAge;
     ///@dev Next distribution index. Distributions are numbered 0..N; 0 is the bootstrap sentinel installed in the constructor.
     uint64 private _distributionId;
 
@@ -188,7 +188,7 @@ abstract contract FairRewardDistributor {
     }
 
     /**
-     * @dev Records a new distribution: consumes the accumulated `_totalStakeAge` from the previous
+     * @dev Records a new distribution: consumes the accumulated `_distributionStakeAge` from the previous
      *      distribution and stores the prefix-sum needed for O(1) per-user reward lookup.
      * @param reward Raw reward amount as understood by the consuming contract; converted to
      *        stake units by `_preDistribute`.
@@ -206,12 +206,12 @@ abstract contract FairRewardDistributor {
             if (newDistributionId == 0) revert DistributionIdOverflow();
             _distributionId = newDistributionId;
 
-            uint192 totalStakeAge = _totalStakeAge + __totalStake * (block64 - _lastUpdateBlock);
-            if (totalStakeAge == 0) revert DistributionNotAvailable();
+            uint192 distributionStakeAge = _distributionStakeAge + uint192(__totalStake) * (block64 - _lastUpdateBlock);
+            if (distributionStakeAge == 0) revert DistributionNotAvailable();
 
             DistributionInfo storage prevDistributionInfo = _distributionInfo[distributionId - 1];
-            uint192 rewardPerStakeAge = (rewardStake * uint128(DENOMINATOR)) / totalStakeAge;
-            uint256 cumRewardAgePerStakeAge = prevDistributionInfo.cumRewardAgePerStakeAge + rewardPerStakeAge
+            uint192 rewardPerStakeAge = (rewardStake * uint192(DENOMINATOR)) / distributionStakeAge;
+            uint256 cumRewardAgePerStakeAge = prevDistributionInfo.cumRewardAgePerStakeAge + uint256(rewardPerStakeAge)
                 * (block64 - prevDistributionInfo.block);
 
             _distributionInfo[distributionId] = DistributionInfo({
@@ -220,7 +220,7 @@ abstract contract FairRewardDistributor {
         }
 
         _lastUpdateBlock = block64;
-        _totalStakeAge = 0;
+        _distributionStakeAge = 0;
 
         _postDistribute(rewardStake);
         return rewardStake;
@@ -341,9 +341,11 @@ abstract contract FairRewardDistributor {
         UserInfo storage userInfo = _userInfo[user];
 
         uint64 fromBlock;
+        uint192 cachedStakeAge;
         uint64 distributionId = _distributionId;
         if (userInfo.lastDistributionId == distributionId) {
             fromBlock = userInfo.lastUpdateBlock;
+            cachedStakeAge = userInfo.stakeAge;
         } else {
             userInfo.reward = uint192(_userReward(user));
             unchecked { fromBlock = _distributionInfo[distributionId - 1].block; } // forgefmt: disable-line
@@ -351,8 +353,8 @@ abstract contract FairRewardDistributor {
 
         uint64 block64 = block.number > type(uint64).max ? type(uint64).max : uint64(block.number);
         unchecked {
-            userInfo.stakeAge = uint192(userInfo.stake * (block64 - fromBlock));
-            _totalStakeAge += uint192(__totalStake * (block64 - _lastUpdateBlock));
+            userInfo.stakeAge = cachedStakeAge + uint192(userInfo.stake) * (block64 - fromBlock);
+            _distributionStakeAge += uint192(__totalStake) * (block64 - _lastUpdateBlock);
         }
 
         userInfo.lastUpdateBlock = block64;
