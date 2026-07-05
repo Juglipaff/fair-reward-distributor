@@ -12,22 +12,22 @@ Constant-gas, deposit-time-weighted, front-run-resistant on-chain reward distrib
 
 ## Algorithm
 
-Full [Algorithm derivation](https://juglipaff.github.io/Token-Distribution-Algorithm/) by [Ivan Menshchikov](https://github.com/Juglipaff) and [Roman Vinogradov](https://github.com/sapph1re).
+[Full Algorithm derivation](https://juglipaff.github.io/Token-Distribution-Algorithm/) by [Ivan Menshchikov](https://github.com/Juglipaff) and [Roman Vinogradov](https://github.com/sapph1re).
 
 ### The problem
 
 Three approaches have historically dominated on-chain reward distribution. Each has significant drawbacks:
 
-**1. Merkle-tree airdrops.**:
+**1. Merkle-tree airdrops**:
 An off-chain process computes each user's earned share (typically weighted by activity over some window), builds a Merkle tree of `(address, amount)` leaves, and publishes the root on-chain. Users claim by submitting a proof. This approach is flexible, as the off-chain computation can weight by anything. However, it is fundamentally centralized and trust-based: the root is produced by a single operator who can change the rules, alter weights, or exclude addresses between snapshots, and nothing on-chain constrains them. Users must trust the operator's data pipeline, or the project must fund extra infrastructure (indexers, ZK proofs, redundant computation) to make the tree verifiable.
 
-**2. Fixed-emission-rate pools** (SushiSwap's `MasterChef`, Synthetix's `StakingRewards`, etc.).: 
+**2. Fixed-emission-rate pools** (SushiSwap's `MasterChef`, Synthetix's `StakingRewards`, etc.): 
 A constant emission rate is streamed to whoever is staked at each block. Fully on-chain and trustless, but rigid, as the reward budget must be committed ahead of time as an emission rate over a window, not a discrete amount tied to when revenue actually arrives. Adjusting mid-window requires a governance / owner action. This rate is a policy parameter, not a market outcome, which makes it hard to align it with irregular revenue sources (e.g. protocol fees that arrive lumpy).
 
-**3. Naïve pull-distribution pools.**:
-A `distribute()` function splits an arbitrary amount proportionally to stake *at the moment of the call*. Discrete like a Merkle drop, permissionless like MasterChef, and made O(1) by the prefix-sum accumulator described in Batog, Boca, and Johnson's [Scalable Reward Distribution on the Ethereum Blockchain](https://batog.info/papers/scalable-reward-distribution.pdf). But it suffers two well-known failures. First, front-running: an attacker sees a pending `distribute()` in the mempool, deposits a large stake just before it lands, and withdraws right after, capturing a share of the reward without providing liquidity over time. Second, late-joiner dilution: a user who staked for the whole interval between distributions receives the same per-token share as a user who staked one block before distribution. Proposals like Centrifuge's [epoch-based reward distribution](https://centrifuge.hackmd.io/@Luis/SkB07jq8o) address front-running by locking rewards behind an epoch boundary, but at the cost of UX (no claiming immediately after a distribution, painful for weekly / monthly cadences) and without eliminating late-joiner dilution precisely.
+**3. Naïve pull-distribution pools**:
+A `distribute()` function splits an arbitrary amount proportionally to stake at the moment of the call. Discrete like a Merkle drop, permissionless like MasterChef, and made O(1) by the prefix-sum accumulator described in Batog, Boca, and Johnson's [Scalable Reward Distribution on the Ethereum Blockchain](https://batog.info/papers/scalable-reward-distribution.pdf). But it suffers two well-known failures. First, front-running: an attacker sees a pending `distribute()` in the mempool, deposits a large stake just before it lands, and withdraws right after, capturing a share of the reward without providing liquidity over time. Second, late-joiner dilution: a user who staked for the whole interval between distributions receives the same per-token share as a user who staked one block before distribution. Proposals like Centrifuge's [epoch-based reward distribution](https://centrifuge.hackmd.io/@Luis/SkB07jq8o) address front-running by locking rewards behind an epoch boundary, but at the cost of UX (no claiming immediately after a distribution, painful for weekly / monthly cadences) and without eliminating late-joiner dilution precisely.
 
-This contract is a fourth option: discrete pull-distribution like (3), fully on-chain and permissionless like (2) and (3), but time-weighted like (1) - closing the front-running and dilution gaps without off-chain infrastructure, a fixed emission schedule, or an epoch lockout on claims.
+This contract is a fourth option: discrete pull-distribution like (3), fully on-chain and permissionless like (2) and (3), but time-weighted like (1), closing the front-running and dilution gaps without off-chain infrastructure, a fixed emission schedule, or an epoch lockout on claims.
 
 ### What this contract does
 
@@ -42,7 +42,7 @@ On every distribution at index `d`, the contract records:
 - `rewardPerStakeAge[d] = reward / distributionStakeAge`
 - `cumRewardAgePerStakeAge[d] = cumRewardAgePerStakeAge[d-1] + rewardPerStakeAge[d] × (block[d] − block[d-1])` 
 
-The second field is a running prefix sum of reward-per-stake-age integrated over blocks, across every distribution so far. The key insight is that if a user's stake stays constant across distributions `a+1..b`, their total owed reward across that run is `stake × Σ_{i=a+1..b} (rewardPerStakeAge[i] × (block[i] − block[i-1]))` — exactly the increments folded into `cumRewardAgePerStakeAge`. Subtracting two snapshots of that prefix sum recovers any range, so the whole sum equals `stake × (cumRewardAgePerStakeAge[b] − cumRewardAgePerStakeAge[a])`. Thus, an arbitrary number of distributions collapses to O(1) work.
+The second field is a running prefix sum of reward-per-stake-age integrated over blocks, across every distribution so far. The key insight is that if a user's stake stays constant across distributions `a+1..b`, their total owed reward across that run is $stake \times \sum_{i=a+1}^{b} (rewardPerStakeAge[i] \times (block[i] - block[i-1]))$ - exactly the increments folded into `cumRewardAgePerStakeAge`. Subtracting two snapshots of that prefix sum recovers any range, so the whole sum equals `stake × (cumRewardAgePerStakeAge[b] − cumRewardAgePerStakeAge[a])`. Thus, an arbitrary number of distributions collapses to O(1) work.
 
 Each user stores:
 
@@ -51,7 +51,9 @@ Each user stores:
 - `stakeAge` - stake-age accumulated across the user's actions within the interval they haven't yet been settled through
 - `stake`, `reward`
 
-Owed reward is then a subtraction of two prefix-sum snapshots covering the block range `(block[user.lastDistributionId], block[latestDistributionId]]`, plus a partial term for `(user.lastUpdateBlock, block[user.lastDistributionId]]` — the interval between the user's last action and the next distribution that closed after it. That partial is just the user's stake-age over the range multiplied by `rewardPerStakeAge` at `user.lastDistributionId`, which every distribution stores. Each of the three terms is O(1) to compute, so any user's owed reward is O(1) at any moment. On every user action (stake or withdraw), the owed reward is collapsed into the stored `reward`, and `stake` / `stakeAge` / `lastDistributionId` / `lastUpdateBlock` are re-anchored to the current state, turning a sequence of stakes and withdrawals into a chain of O(1) settlements, accumulating `stakeAge` within an inter-distribution window and resetting it across window boundaries. Re-anchoring thus preserves the invariant that the stake was constant across the range being summed. No loop over users, no loop over distributions.
+Owed reward is then a subtraction of two prefix-sum snapshots covering the block range `(block[user.lastDistributionId], block[latestDistributionId]]`, plus a partial term for `(user.lastUpdateBlock, block[user.lastDistributionId]]` - the interval between the user's last action and the next distribution that closed after it. That partial is just the user's stake-age over the range multiplied by `rewardPerStakeAge` at `user.lastDistributionId`, which every distribution stores. Each of the three terms is O(1) to compute, so any user's owed reward is O(1) at any moment. 
+
+On every user action (stake or withdraw), the owed reward is collapsed into the stored `reward`, and `stake` / `stakeAge` / `lastDistributionId` / `lastUpdateBlock` are re-anchored to the current state, turning a sequence of stakes and withdrawals into a chain of O(1) settlements, accumulating `stakeAge` within an inter-distribution window and resetting it across window boundaries. Re-anchoring thus preserves the invariant that the stake was constant across the range being summed. No loop over users, no loop over distributions.
 
 ## Assumptions and limits
 
