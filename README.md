@@ -60,11 +60,11 @@ On every user action (stake or withdraw), the owed reward is collapsed into the 
 The items below are properties of this Solidity implementation, not of the underlying algorithm, which is agnostic to integer widths and asset movement.
 
 - **Block numbers stored as `uint64`.** Rewards stop accruing beyond `block.number > 2⁶⁴ − 1` (≈1.8 × 10¹⁹). No mainnet or L2 comes near this. Stated so integrators of exotic execution environments know the horizon.
-- **Stakes stored as `uint128`.** Both individual stakes and the pool total. `_stake` reverts with `TotalStakeOverflow` if the pool total would wrap. Hook implementations must reject any input that would overflow when converted to internal units.
+- **Stakes stored as `uint128`.** Both individual stakes and the pool total. `_stake` reverts with `TotalStakeOverflow` if the pool total would wrap. Implementations must reject any input that would overflow when converted to internal units.
 - **Distribution count stored as `uint64`.** Up to `2⁶⁴ − 1` distributions before `DistributionIdOverflow` reverts and further distributions become impossible. Unreachable in practice.
 - **Withdraw draws from reward first, then principal.** A user's realized reward acts as an implicit balance that can be withdrawn without touching stake. This is a design choice - noted so consumers understand the semantics of `_withdraw`.
 - **Integer rounding leaves dust.** Fixed-point arithmetic truncates, always in the pool's favor over users - never over-paid, occasionally slightly under-paid. Existing tests allow ~1e-16 (0.00000000000001%) relative leeway between actual and expected reward. For pathological cases (tiny reward split across many stakers), some wei may sit un-withdrawable until a later distribution.
-- **Consumer owns asset movement.** The contract is abstract and tracks accounting only. The inheriting contract is responsible for pulling / pushing the underlying tokens in the `_postStake` / `_postWithdraw` / `_postDistribute` hooks. Token semantics (allowance, fee-on-transfer, rebasing, non-standard `bool` returns) are the consumer's responsibility.
+- **Consumer owns asset movement.** The contract is abstract and tracks accounting only. The inheriting contract is responsible for pulling / pushing the underlying tokens. Token semantics (allowance, fee-on-transfer, rebasing, non-standard `bool` returns) are the consumer's responsibility.
 
 ## Dependencies
 
@@ -113,7 +113,7 @@ Foundry resolves it via the `remappings.txt` entry above. Hardhat / npm-based to
 
 ### Integration
 
-Extend the abstract contract and implement six hooks. The example below wraps a single ERC-20 as both stake and reward token, and demonstrates the `recipient` / `user` distinction - the caller can stake *on behalf of* another account and withdraw *to* an arbitrary address.
+The example below wraps a single ERC-20 as both stake and reward token, and demonstrates the `recipient` / `user` distinction - the caller can stake *on behalf of* another account and withdraw *to* an arbitrary address.
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -135,38 +135,22 @@ contract MyPool is FairRewardDistributor {
     // Stake `amount` and credit the position to `recipient`. The caller (msg.sender)
     // pays the tokens; `recipient` owns the resulting stake and future rewards.
     function stakeFor(uint128 amount, address recipient) external {
+        token.safeTransferFrom(msg.sender, address(this), amount);
         _stake(amount, recipient);
     }
 
     // Withdraw from msg.sender's own position and send the tokens to `recipient`.
     function withdrawTo(uint192 amount, address recipient) external {
         _withdraw(amount, msg.sender, recipient);
+        token.safeTransfer(recipient, amount);
     }
 
     function distribute(uint128 amount) external {
+        token.safeTransferFrom(msg.sender, address(this), amount);
         _distribute(amount);
-    }
-
-    // ---- post-hooks: move the underlying ----
-    // Pull from the CALLER (msg.sender), not `recipient`. `recipient` is the
-    // beneficiary of the position, but the caller is who authorized the transfer.
-    function _postStake(uint128 liquidity, address /*recipient*/) internal override {
-        token.safeTransferFrom(msg.sender, address(this), liquidity);
-    }
-
-    // `user` is whose position was reduced; `recipient` is who receives the funds.
-    // In this pool the two can differ (see withdrawTo).
-    function _postWithdraw(uint192 liquidity, address /*user*/, address recipient) internal override {
-        token.safeTransfer(recipient, liquidity);
-    }
-
-    function _postDistribute(uint128 liquidity) internal override {
-        token.safeTransferFrom(msg.sender, address(this), liquidity);
     }
 }
 ```
-
-Hook contract implements `_postStake` / `_postWithdraw` / `_postDistribute` - side-effectful hooks that move the underlying assets after accounting has been updated.
 
 ## Development
 

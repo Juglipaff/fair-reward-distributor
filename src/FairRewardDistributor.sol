@@ -17,8 +17,6 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
  *      Assumptions:
  *      - Block numbers don't exceed 2**64 - 1. Rewards stop accruing beyond that horizon.
  *      - Individual and total stakes are bounded by 2**128 - 1.
- *
- *      Abstract: consumers implement the `_postStake` / `_postWithdraw` / `_postDistribute` hooks to move the underlying assets.
  */
 abstract contract FairRewardDistributor {
     using SafeCast for uint256;
@@ -142,8 +140,6 @@ abstract contract FairRewardDistributor {
             __totalStake = totalStake + liquidity;
             _userInfo[recipient].stake += liquidity;
         }
-
-        _postStake(liquidity, recipient);
     }
 
     /**
@@ -151,9 +147,8 @@ abstract contract FairRewardDistributor {
      *      then from their principal stake.
      * @param liquidity Liquidity amount requested by the caller.
      * @param user Account whose position is being reduced.
-     * @param recipient Address that receives the underlying via `_postWithdraw`.
      */
-    function _withdraw(uint192 liquidity, address user, address recipient) internal {
+    function _withdraw(uint192 liquidity, address user) internal {
         if (liquidity == 0) revert InsufficientLiquidity(liquidity);
 
         _updateStake(user);
@@ -173,8 +168,6 @@ abstract contract FairRewardDistributor {
                 userInfo.reward = reward - liquidity;
             }
         }
-
-        _postWithdraw(liquidity, user, recipient);
     }
 
     /**
@@ -208,33 +201,7 @@ abstract contract FairRewardDistributor {
 
         _lastUpdateBlock = block64;
         _distributionStakeAge = 0;
-
-        _postDistribute(liquidity);
     }
-
-    /**
-     * @dev Hook invoked after a successful `_stake`. Implementers move the underlying deposit into
-     *      the contract or otherwise finalize the stake side-effects.
-     * @param liquidity Liquidity units credited.
-     * @param recipient User credited with the stake.
-     */
-    function _postStake(uint128 liquidity, address recipient) internal virtual;
-
-    /**
-     * @dev Hook invoked after a successful `_withdraw`. Implementers transfer the underlying to
-     *      `recipient` or otherwise finalize the withdrawal side-effects.
-     * @param liquidity Liquidity units withdrawn.
-     * @param user Account whose position was reduced.
-     * @param recipient Address receiving the underlying.
-     */
-    function _postWithdraw(uint192 liquidity, address user, address recipient) internal virtual;
-
-    /**
-     * @dev Hook invoked after a successful `_distribute`. Implementers move the reward tokens into
-     *      the contract or otherwise finalize distribution side-effects.
-     * @param liquidity Liquidity units allocated.
-     */
-    function _postDistribute(uint128 liquidity) internal virtual;
 
     // ============ Internal View Functions ============
 

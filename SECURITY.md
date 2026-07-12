@@ -46,5 +46,5 @@ In scope:
 
 Out of scope:
 
-- Bugs in consumer contracts that misuse the abstract hooks (`_preStake`, `_postWithdraw`, etc.). Those live in the consumer's audit surface.
+- Bugs in consumer contracts that misuse the abstract contract. Those live in the consumer's audit surface.
 - Bugs in third-party dependencies (OpenZeppelin, forge-std). Report those upstream.
