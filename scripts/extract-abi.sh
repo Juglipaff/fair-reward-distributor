@@ -22,6 +22,6 @@ find "$IN_DIR" -name "*.sol" -type f | while read -r file; do
         continue
     fi
     name=$(basename "$file" .sol)
-    forge inspect "$file:$name" abi > "${OUT_DIR}/${name}.json"
+    forge inspect "$file:$name" abi --json > "${OUT_DIR}/${name}.json"
     echo "wrote ${OUT_DIR}/${name}.json"
 done

@@ -14,8 +14,71 @@ on:
         type: string
 
 jobs:
-  validate:
-    name: Validate
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: forge fmt --check
+        run: forge fmt --check
+
+  abi:
+    name: ABI
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Verify committed ABIs match source
+        run: |
+          scripts/extract-abi.sh src abi.check
+          diff -r abi abi.check
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Run Forge tests (with gas snapshot check)
+        env:
+          FOUNDRY_PROFILE: ci
+        run: forge test -vvv
+
+  coverage:
+    name: Coverage
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,19 +94,6 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: stable
-
-      - name: forge fmt --check
-        run: forge fmt --check
-
-      - name: Verify committed ABIs match source
-        run: |
-          scripts/extract-abi.sh src abi.check
-          diff -r abi abi.check
-
-      - name: Run Forge tests (with gas snapshot check)
-        env:
-          FOUNDRY_PROFILE: ci
-        run: forge test -vvv
 
       - name: Run Forge coverage
         run: forge coverage --report lcov

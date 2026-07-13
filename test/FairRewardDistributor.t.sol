@@ -386,6 +386,8 @@ contract FairRewardDistributorTest is Test {
     - bound(5695, 1, 1e6) = 5695. Effective delta = 5695.
     - distributionStakeAge = stake * delta ≈ 3.4e38 * 5695 ≈ 1.93e42.
     - rewardPerStakeAge = reward * DENOMINATOR / distributionStakeAge = 6e19 * 1.8446e19 / 1.93e42 = 1.107e39 / 1.93e42 ≈ 5.7e-4 → **0** in integer math.
+
+    3.4e38 compared to 6e19 is astronomically low payout => it is not registered
     */
 
     function testFuzz_Distribute_SingleUser_GetsFullReward(uint128 stakeAmount, uint128 reward, uint64 delta) public {
