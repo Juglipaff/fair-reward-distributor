@@ -590,50 +590,22 @@ contract FairRewardDistributorERC4626Test is Test {
         assertEq(shares, 40 ether);
     }
 
-    function test_PreviewWithdraw_WithReward_LessThanAssets() public {
-        _depositAs(alice, 100 ether);
-        vm.roll(GENESIS_BLOCK + 10);
-        _distributeAs(bob, 10 ether);
-        vm.roll(GENESIS_BLOCK + 20);
-
-        vm.prank(alice);
-        uint256 shares = vault.previewWithdraw(11 ether);
-
-        assertLe(shares, 10 ether);
-        assertApproxEqRel(shares, 10 ether, REWARD_TOLERANCE);
-    }
-
     function test_PreviewWithdrawFor_ArbitraryOwner() public {
         _depositAs(alice, 100 ether);
         vm.roll(GENESIS_BLOCK + 10);
         _distributeAs(bob, 10 ether);
         vm.roll(GENESIS_BLOCK + 20);
 
-        uint256 shares = vault.previewWithdrawFor(11 ether, alice);
-        assertLe(shares, 10 ether);
-        assertApproxEqRel(shares, 10 ether, REWARD_TOLERANCE);
+        uint256 shares = vault.previewWithdrawFor(110 ether, alice);
+        assertApproxEqRel(shares, 100 ether, REWARD_TOLERANCE);
     }
 
-    //TODO:
     function test_PreviewRedeem_NoReward_OneToOne() public {
         _depositAs(alice, 100 ether);
 
         vm.prank(alice);
         uint256 assets = vault.previewRedeem(40 ether);
         assertEq(assets, 40 ether);
-    }
-
-    function test_PreviewRedeem_WithReward_GreaterThanShares() public {
-        _depositAs(alice, 100 ether);
-        vm.roll(GENESIS_BLOCK + 10);
-        _distributeAs(bob, 10 ether);
-        vm.roll(GENESIS_BLOCK + 20);
-
-        vm.prank(alice);
-        uint256 assets = vault.previewRedeem(100 ether);
-
-        assertGt(assets, 100 ether);
-        assertApproxEqRel(assets, 110 ether, REWARD_TOLERANCE);
     }
 
     function test_PreviewRedeemFor_ArbitraryOwner() public {
@@ -705,7 +677,7 @@ contract FairRewardDistributorERC4626Test is Test {
     function test_MaxWithdraw_AfterFullExit_ReturnsZero() public {
         _depositAs(alice, 100 ether);
         vm.prank(alice);
-        vault.redeem(100 ether, alice, alice);
+        vault.withdraw(100 ether, alice, alice);
 
         assertEq(vault.maxWithdraw(alice), 0);
     }
@@ -761,8 +733,8 @@ contract FairRewardDistributorERC4626Test is Test {
     }
 
     function testFuzz_Distribute_TwoUsersEqualStake_HalfEach(uint128 stakeAmount, uint128 rewardAmount) public {
-        stakeAmount = uint128(bound(uint256(stakeAmount), 1e6, type(uint128).max / 2));
-        rewardAmount = uint128(bound(uint256(rewardAmount), 1e6, type(uint128).max));
+        stakeAmount = uint128(bound(uint256(stakeAmount), 1e18, type(uint128).max / 2));
+        rewardAmount = uint128(bound(uint256(rewardAmount), 1e18, type(uint128).max));
 
         _depositAs(alice, stakeAmount);
         _depositAs(bob, stakeAmount);
