@@ -12,6 +12,7 @@
   "bugs": "https://github.com/Juglipaff/fair-reward-distributor/issues",
   "files": [
     "src/**/*.sol",
+    "abi/**/*.json",
     "LICENSE"
   ],
   "keywords": [

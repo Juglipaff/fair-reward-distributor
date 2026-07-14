@@ -1,10 +1,10 @@
 {
-  "distribute_single_staker": "50946",
-  "distribute_two_stakers": "50946",
-  "stake_add_to_existing": "28647",
-  "stake_first": "51968",
+  "distribute_single_staker": "50917",
+  "distribute_two_stakers": "50917",
+  "stake_add_to_existing": "28591",
+  "stake_first": "51906",
   "userReward_cached": "2298",
   "userReward_unsettled": "4224",
-  "withdraw_after_distribution": "49422",
-  "withdraw_from_stake": "29501"
+  "withdraw_after_distribution": "48897",
+  "withdraw_from_stake": "28982"
 }

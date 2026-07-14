@@ -23,7 +23,7 @@
 
 ## Breaking changes
 
-<!-- Does this change anything a downstream consumer relies on? Storage layout, ABI, error/event shape, gas class, invariants, hook signatures, etc. Describe. Delete section if not applicable. -->
+<!-- Does this change anything a downstream consumer relies on? Storage layout, ABI (any `abi/*.json` diff), error/event shape, gas class, invariants, function signatures, etc. Describe. Delete section if not applicable. -->
 
 ## New dependencies
 

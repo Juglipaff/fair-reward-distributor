@@ -6,8 +6,8 @@ import { FairRewardDistributor } from "../../src/FairRewardDistributor.sol";
 /**
  * @title FairRewardDistributorHarness
  * @dev Test-only concrete implementation of the abstract FairRewardDistributor. Uses 1:1
- *      conversion between raw liquidity and internal stake units and no-op post hooks so tests
- *      can exercise the pure accounting layer without token transfer semantics interfering.
+ *      conversion between raw liquidity and internal stake units so tests can exercise
+ *      the pure accounting layer without token transfer semantics interfering.
  */
 contract FairRewardDistributorHarness is FairRewardDistributor {
     // ============ External Write Functions ============
@@ -25,10 +25,9 @@ contract FairRewardDistributorHarness is FairRewardDistributor {
      * @dev Exposes `_withdraw` to tests.
      * @param liquidity Raw withdrawal amount.
      * @param user Account whose position is reduced.
-     * @param recipient Address that would receive the underlying (unused since post hooks are no-ops).
      */
-    function withdraw(uint192 liquidity, address user, address recipient) external {
-        _withdraw(liquidity, user, recipient);
+    function withdraw(uint192 liquidity, address user) external {
+        _withdraw(liquidity, user);
     }
 
     /**
@@ -66,21 +65,4 @@ contract FairRewardDistributorHarness is FairRewardDistributor {
     function userReward(address user) external view returns (uint256) {
         return _userReward(user);
     }
-
-    // ============ Internal Write Functions ============
-
-    /**
-     * @inheritdoc FairRewardDistributor
-     */
-    function _postStake(uint128, address) internal pure override { }
-
-    /**
-     * @inheritdoc FairRewardDistributor
-     */
-    function _postWithdraw(uint192, address, address) internal pure override { }
-
-    /**
-     * @inheritdoc FairRewardDistributor
-     */
-    function _postDistribute(uint128) internal pure override { }
 }

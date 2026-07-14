@@ -41,7 +41,7 @@ forge fmt
 
 ## Style
 
-Match the pattern established in `src/FairRewardDistributor.sol`. `forge fmt` must pass.
+Match the pattern established in `src/` folder. `forge fmt` must pass.
 
 ### Imports
 
@@ -198,7 +198,9 @@ forge coverage           # coverage report
 
 New tests should be property-based / fuzz where the invariant is universal (conservation of reward, monotonicity of `stakeAge`, etc.). Reserve unit tests for specific edge cases and error paths.
 
-Dedicated gas benchmarks live in `test/gas/` and use `vm.startSnapshotGas` / `vm.stopSnapshotGas` fences to measure only the target operation. Results are persisted to `snapshots/<TestContract>.json` and committed to the repo. The snapshot diff must be justified in the PR body's "Gas impact" section. Reviewers gate on whether the delta matches the stated intent. 
+Dedicated gas benchmarks live in `test/gas/` and use `vm.startSnapshotGas` / `vm.stopSnapshotGas` fences to measure only the target operation. Results are persisted to `snapshots/<TestContract>.json` and committed to the repo. The snapshot diff must be justified in the PR body's "Gas impact" section. Reviewers gate on whether the delta matches the stated intent.
+
+ABI artifacts live in `abi/<Contract>.json` and are committed to the repo so npm consumers can import them without a build step. Regenerate via `scripts/extract-abi.sh src abi` after any change to `src/`. Any diff is downstream-visible and must be justified in the PR body's "Breaking changes" section. CI fails on drift.
 
 ## Commits
 

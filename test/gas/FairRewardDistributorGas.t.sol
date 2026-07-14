@@ -75,7 +75,7 @@ contract FairRewardDistributorGasTest is Test {
 
         uint192 liquidity = STAKE / 2;
         vm.startSnapshotGas("withdraw_from_stake");
-        harness.withdraw(liquidity, alice, alice);
+        harness.withdraw(liquidity, alice);
         vm.stopSnapshotGas();
     }
 
@@ -90,7 +90,7 @@ contract FairRewardDistributorGasTest is Test {
 
         uint192 liquidity = STAKE / 2;
         vm.startSnapshotGas("withdraw_after_distribution");
-        harness.withdraw(liquidity, alice, alice);
+        harness.withdraw(liquidity, alice);
         vm.stopSnapshotGas();
     }
 

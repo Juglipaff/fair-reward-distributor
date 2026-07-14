@@ -60,11 +60,12 @@ On every user action (stake or withdraw), the owed reward is collapsed into the 
 The items below are properties of this Solidity implementation, not of the underlying algorithm, which is agnostic to integer widths and asset movement.
 
 - **Block numbers stored as `uint64`.** Rewards stop accruing beyond `block.number > 2⁶⁴ − 1` (≈1.8 × 10¹⁹). No mainnet or L2 comes near this. Stated so integrators of exotic execution environments know the horizon.
-- **Stakes stored as `uint128`.** Both individual stakes and the pool total. `_stake` reverts with `TotalStakeOverflow` if the pool total would wrap. Hook implementations must reject any input that would overflow when converted to internal units.
+- **Stakes stored as `uint128`.** Both individual stakes and the pool total. `_stake` reverts with `TotalStakeOverflow` if the pool total would wrap. Implementations must reject any input that would overflow when converted to internal units.
 - **Distribution count stored as `uint64`.** Up to `2⁶⁴ − 1` distributions before `DistributionIdOverflow` reverts and further distributions become impossible. Unreachable in practice.
 - **Withdraw draws from reward first, then principal.** A user's realized reward acts as an implicit balance that can be withdrawn without touching stake. This is a design choice - noted so consumers understand the semantics of `_withdraw`.
 - **Integer rounding leaves dust.** Fixed-point arithmetic truncates, always in the pool's favor over users - never over-paid, occasionally slightly under-paid. Existing tests allow ~1e-16 (0.00000000000001%) relative leeway between actual and expected reward. For pathological cases (tiny reward split across many stakers), some wei may sit un-withdrawable until a later distribution.
-- **Consumer owns asset movement.** The contract is abstract and tracks accounting only. The inheriting contract is responsible for pulling / pushing the underlying tokens in the `_postStake` / `_postWithdraw` / `_postDistribute` hooks. Token semantics (allowance, fee-on-transfer, rebasing, non-standard `bool` returns) are the consumer's responsibility.
+- **Consumer owns asset movement.** The contract is abstract and tracks accounting only. The inheriting contract is responsible for pulling / pushing the underlying tokens. Token semantics (allowance, fee-on-transfer, rebasing, non-standard `bool` returns) are the consumer's responsibility.
+- **Stake and reward must be the same token.** The base contract mixes reward directly back into stake accounting (withdraw draws from reward first, then principal), so the two must share a denomination. A future revision may separate them.
 
 ## Dependencies
 
@@ -113,7 +114,7 @@ Foundry resolves it via the `remappings.txt` entry above. Hardhat / npm-based to
 
 ### Integration
 
-Extend the abstract contract and implement six hooks. The example below wraps a single ERC-20 as both stake and reward token, and demonstrates the `recipient` / `user` distinction - the caller can stake *on behalf of* another account and withdraw *to* an arbitrary address.
+The example below wraps a single ERC-20 as both stake and reward token, and demonstrates the `recipient` / `user` distinction - the caller can stake *on behalf of* another account and withdraw *to* an arbitrary address.
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -135,38 +136,46 @@ contract MyPool is FairRewardDistributor {
     // Stake `amount` and credit the position to `recipient`. The caller (msg.sender)
     // pays the tokens; `recipient` owns the resulting stake and future rewards.
     function stakeFor(uint128 amount, address recipient) external {
+        token.safeTransferFrom(msg.sender, address(this), amount);
         _stake(amount, recipient);
     }
 
     // Withdraw from msg.sender's own position and send the tokens to `recipient`.
     function withdrawTo(uint192 amount, address recipient) external {
         _withdraw(amount, msg.sender, recipient);
+        token.safeTransfer(recipient, amount);
     }
 
     function distribute(uint128 amount) external {
+        token.safeTransferFrom(msg.sender, address(this), amount);
         _distribute(amount);
-    }
-
-    // ---- post-hooks: move the underlying ----
-    // Pull from the CALLER (msg.sender), not `recipient`. `recipient` is the
-    // beneficiary of the position, but the caller is who authorized the transfer.
-    function _postStake(uint128 liquidity, address /*recipient*/) internal override {
-        token.safeTransferFrom(msg.sender, address(this), liquidity);
-    }
-
-    // `user` is whose position was reduced; `recipient` is who receives the funds.
-    // In this pool the two can differ (see withdrawTo).
-    function _postWithdraw(uint192 liquidity, address /*user*/, address recipient) internal override {
-        token.safeTransfer(recipient, liquidity);
-    }
-
-    function _postDistribute(uint128 liquidity) internal override {
-        token.safeTransferFrom(msg.sender, address(this), liquidity);
     }
 }
 ```
 
-Hook contract implements `_postStake` / `_postWithdraw` / `_postDistribute` - side-effectful hooks that move the underlying assets after accounting has been updated.
+### ERC-4626 wrapper
+
+`FairRewardDistributorERC4626` is a concrete, deployable implementation that exposes the primitive under the ERC-4626 vault interface. By default, shares mint 1:1 with deposited assets and reward accrues implicitly by inflating the redemption value of every existing share as future `distribute` calls land. No shares are minted on distribute.
+
+```solidity
+import { FairRewardDistributorERC4626 } from "@juglipaff/fair-reward-distributor/src/FairRewardDistributorERC4626.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+FairRewardDistributorERC4626 vault = new FairRewardDistributorERC4626(
+    "My Vault Share", "vMY", IERC20(assetAddress)
+);
+```
+
+`distribute(uint256 assets)` pulls `assets` from the caller and credits every current participant proportionally to their stake-age share, using the base algorithm. `deposit` / `mint` open a position, `withdraw` / `redeem` close it and pay principal plus accrued reward. `previewWithdrawFor(uint256 assets, address owner)` and `previewRedeemFor(uint256 shares, address owner)` extend the standard preview surface with per-account queries so integrators can quote against any holder, not just `msg.sender`.
+
+#### Overriding
+
+Every non-trivial hook is `virtual` so downstream vaults can customize behavior without forking:
+
+- `_convertToShares` / `_convertToAssets` - default identity mapping (shares == assets). Override to install a custom exchange rate.
+- `_maxDeposit` / `_maxMint` / `_maxWithdraw` / `_maxRedeem` / `_maxDistribute` - default `type(uintN).max`. Override to install per-account caps, KYC gates, or pause switches without touching the ERC-4626 public surface.
+- `_deposit` / `_withdraw` / `_distribute` - standard OpenZeppelin hooks; override to layer additional accounting (fees, waitlists) on top of the stake settlement the wrapper already performs.
+- `previewDistribute` / `previewWithdrawFor` / `previewRedeemFor` - `virtual` too, so a vault can change how a reward assets amount maps to internal share units before it hits the base algorithm.
 
 ## Development
 
@@ -176,4 +185,10 @@ This repo uses Foundry for development and testing and git submodules for depend
 git clone https://github.com/Juglipaff/fair-reward-distributor.git
 cd fair-reward-distributor
 forge install
+
+### Make changes
+
+forge test # Test and regenerate gas snapshots
+forge coverage # Collect coverage - CI fails if < 100% coverage
+scripts/extract-abi.sh src abi # Regenerate abis
 ```
