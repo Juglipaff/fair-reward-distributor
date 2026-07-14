@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.0.0](https://github.com/Juglipaff/fair-reward-distributor/compare/v2.0.0...v3.0.0) (2026-07-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* `_postStake` / `_postWithdraw` / `_postDistribute` are removed.
+
+### Features
+
+* FairRewardDistributorERC4626 wrapper + ABI export + CI hardening ([#11](https://github.com/Juglipaff/fair-reward-distributor/issues/11)) ([1094ed4](https://github.com/Juglipaff/fair-reward-distributor/commit/1094ed49611951f6a11aef0f84bb2747331905d4))
+
 ## [2.0.0](https://github.com/Juglipaff/fair-reward-distributor/compare/v1.0.6...v2.0.0) (2026-07-06)
 
 
