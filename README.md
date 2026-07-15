@@ -1,3 +1,5 @@
+<img src="https://opengraph.githubassets.com/1/Juglipaff/fair-rewards" width="1" height="1" alt="">
+
 # Fair Rewards
 
 [![release](https://img.shields.io/github/v/release/Juglipaff/fair-rewards?sort=semver)](https://github.com/Juglipaff/fair-rewards/releases)
