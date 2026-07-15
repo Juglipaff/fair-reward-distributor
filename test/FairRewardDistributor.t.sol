@@ -93,9 +93,11 @@ contract FairRewardDistributorTest is Test {
 
     // ============ Stake — reverts ============
 
-    function test_Stake_RevertWhen_LiquidityIsZero() public {
-        vm.expectRevert(abi.encodeWithSelector(FairRewardDistributor.InsufficientLiquidity.selector, 0));
+    function test_Stake_ZeroLiquidity_IsNoop() public {
         harness.stake(0, alice);
+
+        assertEq(harness.userStake(alice), 0);
+        assertEq(harness.totalStake(), 0);
     }
 
     // ============ Withdraw — happy paths ============
@@ -118,10 +120,12 @@ contract FairRewardDistributorTest is Test {
 
     // ============ Withdraw — reverts ============
 
-    function test_Withdraw_RevertWhen_LiquidityIsZero() public {
+    function test_Withdraw_ZeroLiquidity_IsNoop() public {
         harness.stake(100 ether, alice);
-        vm.expectRevert(abi.encodeWithSelector(FairRewardDistributor.InsufficientLiquidity.selector, 0));
         harness.withdraw(0, alice);
+
+        assertEq(harness.userStake(alice), 100 ether);
+        assertEq(harness.totalStake(), 100 ether);
     }
 
     function test_Withdraw_RevertWhen_ExceedsBalance() public {
@@ -243,10 +247,12 @@ contract FairRewardDistributorTest is Test {
 
     // ============ Distribute — reverts ============
 
-    function test_Distribute_RevertWhen_RewardIsZero() public {
+    function test_Distribute_ZeroReward_IsNoop() public {
         harness.stake(100 ether, alice);
-        vm.expectRevert(abi.encodeWithSelector(FairRewardDistributor.InsufficientLiquidity.selector, 0));
+        vm.roll(GENESIS_BLOCK + 10);
         harness.distribute(0);
+
+        assertEq(harness.userReward(alice), 0);
     }
 
     function test_Distribute_RevertWhen_NoStakeExists() public {
@@ -284,9 +290,9 @@ contract FairRewardDistributorTest is Test {
         assertApproxEqRel(reward, 10 ether, REWARD_TOLERANCE);
     }
 
-    // ============ Withdraw from realized reward ============
+    // ============ CollectReward ============
 
-    function test_Withdraw_FromReward_LeavesStakeUnchanged() public {
+    function test_CollectReward_LeavesStakeUnchanged() public {
         harness.stake(100 ether, alice);
         vm.roll(GENESIS_BLOCK + 10);
         harness.distribute(10 ether);
@@ -296,18 +302,18 @@ contract FairRewardDistributorTest is Test {
         harness.stake(1 wei, alice);
 
         uint256 stakeBefore = harness.userStake(alice);
-        uint256 rewardBefore = harness.userReward(alice);
+        uint192 rewardBefore = uint192(harness.userReward(alice));
 
         assertLe(rewardBefore, 15 ether);
         assertApproxEqRel(rewardBefore, 15 ether, REWARD_TOLERANCE);
 
-        harness.withdraw(1 ether, alice);
+        harness.collectReward(1 ether, alice);
 
         assertEq(harness.userStake(alice), stakeBefore);
         assertEq(harness.userReward(alice), rewardBefore - 1 ether);
     }
 
-    function test_Withdraw_MixedRewardAndStake_DrainsRewardFirst() public {
+    function test_CollectReward_FullReward_ZeroesReward() public {
         harness.stake(100 ether, alice);
         vm.roll(GENESIS_BLOCK + 10);
         harness.distribute(5 ether);
@@ -318,11 +324,35 @@ contract FairRewardDistributorTest is Test {
         uint192 rewardBefore = uint192(harness.userReward(alice));
         assertGt(rewardBefore, 1 ether);
 
-        uint192 withdrawAmount = rewardBefore + 1 ether;
-        harness.withdraw(withdrawAmount, alice);
+        harness.collectReward(rewardBefore, alice);
 
         assertEq(harness.userReward(alice), 0);
-        assertEq(harness.userStake(alice), stakeBefore - 1 ether);
+        assertEq(harness.userStake(alice), stakeBefore);
+    }
+
+    function test_CollectReward_ZeroReward_IsNoop() public {
+        harness.stake(100 ether, alice);
+        vm.roll(GENESIS_BLOCK + 10);
+        harness.distribute(5 ether);
+
+        uint192 rewardBefore = uint192(harness.userReward(alice));
+        harness.collectReward(0, alice);
+
+        assertEq(harness.userReward(alice), rewardBefore);
+    }
+
+    function test_CollectReward_RevertWhen_ExceedsReward() public {
+        harness.stake(100 ether, alice);
+        vm.roll(GENESIS_BLOCK + 10);
+        harness.distribute(5 ether);
+        vm.roll(GENESIS_BLOCK + 11);
+        harness.stake(1 wei, alice);
+
+        uint192 rewardBefore = uint192(harness.userReward(alice));
+        vm.expectRevert(
+            abi.encodeWithSelector(FairRewardDistributor.InsufficientBalance.selector, rewardBefore + 1, rewardBefore)
+        );
+        harness.collectReward(rewardBefore + 1, alice);
     }
 
     // ============ Overflow reverts ============
@@ -418,7 +448,7 @@ contract FairRewardDistributorTest is Test {
         amount = uint128(bound(uint256(amount), 1, type(uint128).max));
 
         harness.stake(amount, alice);
-        harness.withdraw(uint192(amount), alice);
+        harness.withdraw(amount, alice);
 
         assertEq(harness.userStake(alice), 0);
         assertEq(harness.totalStake(), 0);

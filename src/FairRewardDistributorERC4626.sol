@@ -20,6 +20,7 @@ import { FairRewardDistributor } from "./FairRewardDistributor.sol";
  *      Assumptions:
  *      - Block numbers don't exceed 2**64 - 1. Rewards stop accruing beyond that horizon.
  *      - Individual and total stakes are bounded by 2**128 - 1.
+ *      - Underlying token is reward token.
  */
 contract FairRewardDistributorERC4626 is ERC4626, FairRewardDistributor {
     using SafeCast for uint256;
@@ -198,7 +199,14 @@ contract FairRewardDistributorERC4626 is ERC4626, FairRewardDistributor {
         override
     {
         super._withdraw(caller, receiver, owner, assets, shares);
-        _withdraw(assets.toUint128(), owner);
+
+        uint128 userStake = _userStake(owner);
+        uint128 toWithdraw = uint128(Math.min(userStake, assets));
+        uint192 toCollect;
+        unchecked { toCollect = (assets - toWithdraw).toUint192(); } // forgefmt: disable-line
+
+        _withdraw(toWithdraw, owner);
+        if (toCollect > 0) _collectReward(toCollect, owner);
     }
 
     /**

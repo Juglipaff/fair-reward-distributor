@@ -77,12 +77,6 @@ abstract contract FairRewardDistributor {
     // ============ Errors ============
 
     /**
-     * @dev Thrown when zero liquidity is provided to stake / withdraw / distribute calls.
-     * @param liquidity The rejected stake value.
-     */
-    error InsufficientLiquidity(uint256 liquidity);
-
-    /**
      * @dev Thrown when a withdrawal exceeds the user's stake + realized reward balance.
      * @param requested Amount requested.
      * @param actual Amount available.
@@ -129,7 +123,7 @@ abstract contract FairRewardDistributor {
      * @param recipient User to credit with the stake.
      */
     function _stake(uint128 liquidity, address recipient) internal {
-        if (liquidity == 0) revert InsufficientLiquidity(liquidity);
+        if (liquidity == 0) return;
 
         _updateStake(recipient);
 
@@ -143,31 +137,39 @@ abstract contract FairRewardDistributor {
     }
 
     /**
-     * @dev Withdraws liquidity for a user, drawing first from their realized reward balance and
-     *      then from their principal stake.
+     * @dev Withdraws liquidity for a user, drawing from their principal stake.
      * @param liquidity Liquidity amount requested by the caller.
      * @param user Account whose position is being reduced.
      */
-    function _withdraw(uint192 liquidity, address user) internal {
-        if (liquidity == 0) revert InsufficientLiquidity(liquidity);
+    function _withdraw(uint128 liquidity, address user) internal {
+        if (liquidity == 0) return;
 
         _updateStake(user);
 
         UserInfo storage userInfo = _userInfo[user];
-        uint192 reward = userInfo.reward;
+        uint128 balance = userInfo.stake;
+        if (liquidity > balance) revert InsufficientBalance(liquidity, balance);
+
         unchecked {
-            if (liquidity > reward) {
-                uint192 balance = userInfo.stake + reward;
-                if (liquidity > balance) revert InsufficientBalance(liquidity, balance);
-
-                userInfo.stake = uint128(balance - liquidity);
-                __totalStake += uint128(reward - liquidity);
-
-                userInfo.reward = 0;
-            } else {
-                userInfo.reward = reward - liquidity;
-            }
+            userInfo.stake = balance - liquidity;
+            __totalStake -= liquidity;
         }
+    }
+
+    /**
+     * @dev Collects rewards for a user, drawing from their reward parameter.
+     * @param reward Reward amount requested by the caller.
+     * @param user Account whose position is being reduced.
+     */
+    function _collectReward(uint192 reward, address user) internal {
+        if (reward == 0) return;
+
+        _updateStake(user);
+
+        UserInfo storage userInfo = _userInfo[user];
+        uint192 userReward = userInfo.reward;
+        if (reward > userReward) revert InsufficientBalance(reward, userReward);
+        unchecked { userInfo.reward = userReward - reward; } // forgefmt: disable-line
     }
 
     /**
@@ -176,7 +178,7 @@ abstract contract FairRewardDistributor {
      * @param liquidity Reward liquidity amount.
      */
     function _distribute(uint128 liquidity) internal {
-        if (liquidity == 0) revert InsufficientLiquidity(liquidity);
+        if (liquidity == 0) return;
 
         uint64 block64 = block.number.toUint64();
         uint64 distributionId = _distributionId;

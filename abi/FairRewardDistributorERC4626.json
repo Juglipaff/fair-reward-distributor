@@ -939,17 +939,6 @@
   },
   {
     "type": "error",
-    "name": "InsufficientLiquidity",
-    "inputs": [
-      {
-        "name": "liquidity",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
-  },
-  {
-    "type": "error",
     "name": "SafeCastOverflowedUintDowncast",
     "inputs": [
       {
