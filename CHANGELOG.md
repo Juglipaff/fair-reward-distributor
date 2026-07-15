@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.0.0](https://github.com/Juglipaff/fair-reward-distributor/compare/v3.0.0...v4.0.0) (2026-07-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* separate reward collection from stake withdrawal ([#13](https://github.com/Juglipaff/fair-reward-distributor/issues/13))
+
+### Features
+
+* separate reward collection from stake withdrawal ([#13](https://github.com/Juglipaff/fair-reward-distributor/issues/13)) ([374bad7](https://github.com/Juglipaff/fair-reward-distributor/commit/374bad7785bf5bb8f5d4faa312efc29b524e58c3))
+
 ## [3.0.0](https://github.com/Juglipaff/fair-reward-distributor/compare/v2.0.0...v3.0.0) (2026-07-14)
 
 
