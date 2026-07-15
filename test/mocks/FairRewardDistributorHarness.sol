@@ -26,8 +26,17 @@ contract FairRewardDistributorHarness is FairRewardDistributor {
      * @param liquidity Raw withdrawal amount.
      * @param user Account whose position is reduced.
      */
-    function withdraw(uint192 liquidity, address user) external {
+    function withdraw(uint128 liquidity, address user) external {
         _withdraw(liquidity, user);
+    }
+
+    /**
+     * @dev Exposes `_collectReward` to tests.
+     * @param reward Raw withdrawal amount.
+     * @param user Account whose position is reduced.
+     */
+    function collectReward(uint192 reward, address user) external {
+        _collectReward(reward, user);
     }
 
     /**

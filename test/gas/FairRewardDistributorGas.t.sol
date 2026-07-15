@@ -73,7 +73,7 @@ contract FairRewardDistributorGasTest is Test {
         harness.stake(STAKE, alice);
         vm.roll(GENESIS_BLOCK + 100);
 
-        uint192 liquidity = STAKE / 2;
+        uint128 liquidity = STAKE / 2;
         vm.startSnapshotGas("withdraw_from_stake");
         harness.withdraw(liquidity, alice);
         vm.stopSnapshotGas();
@@ -88,7 +88,7 @@ contract FairRewardDistributorGasTest is Test {
         harness.distribute(REWARD);
         vm.roll(GENESIS_BLOCK + 200);
 
-        uint192 liquidity = STAKE / 2;
+        uint128 liquidity = STAKE / 2;
         vm.startSnapshotGas("withdraw_after_distribution");
         harness.withdraw(liquidity, alice);
         vm.stopSnapshotGas();
@@ -117,6 +117,36 @@ contract FairRewardDistributorGasTest is Test {
 
         vm.startSnapshotGas("distribute_two_stakers");
         harness.distribute(REWARD);
+        vm.stopSnapshotGas();
+    }
+
+    /**
+     * @dev `collectReward` on realized reward with no pending distribution to settle.
+     */
+    function test_Gas_CollectReward_Cached() public {
+        harness.stake(STAKE, alice);
+        vm.roll(GENESIS_BLOCK + 100);
+        harness.distribute(REWARD);
+        harness.stake(1, alice); // Bumps lastDistributionId to current, realizes reward.
+
+        uint192 reward = uint192(REWARD) / 2;
+        vm.startSnapshotGas("collectReward_cached");
+        harness.collectReward(reward, alice);
+        vm.stopSnapshotGas();
+    }
+
+    /**
+     * @dev `collectReward` after a distribution, forcing reward settlement through the prefix-sum path.
+     */
+    function test_Gas_CollectReward_AfterDistribution_SettlesReward() public {
+        harness.stake(STAKE, alice);
+        vm.roll(GENESIS_BLOCK + 100);
+        harness.distribute(REWARD);
+        vm.roll(GENESIS_BLOCK + 200);
+
+        uint192 reward = uint192(REWARD) / 2;
+        vm.startSnapshotGas("collectReward_after_distribution");
+        harness.collectReward(reward, alice);
         vm.stopSnapshotGas();
     }
 

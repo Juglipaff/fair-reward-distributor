@@ -228,10 +228,13 @@ contract FairRewardDistributorERC4626Test is Test {
 
     // ============ Deposit — reverts ============
 
-    function test_Deposit_RevertWhen_AmountZero() public {
+    function test_Deposit_ZeroAmount_IsNoop() public {
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(FairRewardDistributor.InsufficientLiquidity.selector, 0));
-        vault.deposit(0, alice);
+        uint256 shares = vault.deposit(0, alice);
+
+        assertEq(shares, 0);
+        assertEq(vault.balanceOf(alice), 0);
+        assertEq(vault.totalAssets(), 0);
     }
 
     function test_Deposit_RevertWhen_ExceedsMax() public {
@@ -264,10 +267,13 @@ contract FairRewardDistributorERC4626Test is Test {
 
     // ============ Mint — reverts ============
 
-    function test_Mint_RevertWhen_AmountZero() public {
+    function test_Mint_ZeroAmount_IsNoop() public {
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(FairRewardDistributor.InsufficientLiquidity.selector, 0));
-        vault.mint(0, alice);
+        uint256 assets = vault.mint(0, alice);
+
+        assertEq(assets, 0);
+        assertEq(vault.balanceOf(alice), 0);
+        assertEq(vault.totalAssets(), 0);
     }
 
     function test_Mint_RevertWhen_ExceedsMax() public {
@@ -546,12 +552,16 @@ contract FairRewardDistributorERC4626Test is Test {
 
     // ============ Distribute — reverts ============
 
-    function test_Distribute_RevertWhen_AmountZero() public {
+    function test_Distribute_ZeroAmount_IsNoop() public {
         _depositAs(alice, 100 ether);
+        vm.roll(block.number + 10);
 
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(FairRewardDistributor.InsufficientLiquidity.selector, 0));
         vault.distribute(0);
+
+        assertEq(vault.balanceOf(alice), 100 ether);
+        assertEq(vault.totalSupply(), 100 ether);
+        assertEq(vault.totalAssets(), 100 ether);
     }
 
     function test_Distribute_RevertWhen_NoStake() public {

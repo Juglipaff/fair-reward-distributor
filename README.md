@@ -65,7 +65,6 @@ The items below are properties of this Solidity implementation, not of the under
 - **Withdraw draws from reward first, then principal.** A user's realized reward acts as an implicit balance that can be withdrawn without touching stake. This is a design choice - noted so consumers understand the semantics of `_withdraw`.
 - **Integer rounding leaves dust.** Fixed-point arithmetic truncates, always in the pool's favor over users - never over-paid, occasionally slightly under-paid. Existing tests allow ~1e-16 (0.00000000000001%) relative leeway between actual and expected reward. For pathological cases (tiny reward split across many stakers), some wei may sit un-withdrawable until a later distribution.
 - **Consumer owns asset movement.** The contract is abstract and tracks accounting only. The inheriting contract is responsible for pulling / pushing the underlying tokens. Token semantics (allowance, fee-on-transfer, rebasing, non-standard `bool` returns) are the consumer's responsibility.
-- **Stake and reward must be the same token.** The base contract mixes reward directly back into stake accounting (withdraw draws from reward first, then principal), so the two must share a denomination. A future revision may separate them.
 
 ## Dependencies
 
@@ -102,7 +101,7 @@ Then add to `remappings.txt`:
 npm install @juglipaff/fair-reward-distributor
 ```
 
-### Import
+### Base algorithm import
 
 Regardless of installer, the Solidity import path is the same:
 
@@ -111,8 +110,6 @@ import { FairRewardDistributor } from "@juglipaff/fair-reward-distributor/src/Fa
 ```
 
 Foundry resolves it via the `remappings.txt` entry above. Hardhat / npm-based toolchains resolve it directly out of `node_modules/@juglipaff/fair-reward-distributor/src/FairRewardDistributor.sol`.
-
-### Integration
 
 The example below wraps a single ERC-20 as both stake and reward token, and demonstrates the `recipient` / `user` distinction - the caller can stake *on behalf of* another account and withdraw *to* an arbitrary address.
 
@@ -153,9 +150,9 @@ contract MyPool is FairRewardDistributor {
 }
 ```
 
-### ERC-4626 wrapper
+### ERC-4626 wrapper import
 
-`FairRewardDistributorERC4626` is a concrete, deployable implementation that exposes the primitive under the ERC-4626 vault interface. By default, shares mint 1:1 with deposited assets and reward accrues implicitly by inflating the redemption value of every existing share as future `distribute` calls land. No shares are minted on distribute.
+`FairRewardDistributorERC4626` is a concrete, deployable implementation that exposes the primitive under the ERC-4626 vault interface. By default, shares mint 1:1 with deposited assets and reward accrues implicitly by inflating the redemption value of every existing share as future `distribute` calls land. No shares are minted on distribute. Stake and reward are the same token in this implementation.
 
 ```solidity
 import { FairRewardDistributorERC4626 } from "@juglipaff/fair-reward-distributor/src/FairRewardDistributorERC4626.sol";
@@ -176,6 +173,17 @@ Every non-trivial hook is `virtual` so downstream vaults can customize behavior 
 - `_maxDeposit` / `_maxMint` / `_maxWithdraw` / `_maxRedeem` / `_maxDistribute` - default `type(uintN).max`. Override to install per-account caps, KYC gates, or pause switches without touching the ERC-4626 public surface.
 - `_deposit` / `_withdraw` / `_distribute` - standard OpenZeppelin hooks; override to layer additional accounting (fees, waitlists) on top of the stake settlement the wrapper already performs.
 - `previewDistribute` / `previewWithdrawFor` / `previewRedeemFor` - `virtual` too, so a vault can change how a reward assets amount maps to internal share units before it hits the base algorithm.
+
+### ABI import
+
+Pre-generated ABIs ship in the `abi/` directory of the npm package for off-chain clients (ethers.js, viem, wagmi, web3.js, etc.):
+
+```js
+import FairRewardDistributor from "@juglipaff/fair-reward-distributor/abi/FairRewardDistributor.json";
+import FairRewardDistributorERC4626 from "@juglipaff/fair-reward-distributor/abi/FairRewardDistributorERC4626.json";
+```
+
+TypeScript projects can import the JSON directly with `resolveJsonModule` enabled in `tsconfig.json`. ABI files are regenerated on every release, so no post-install compilation is required.
 
 ## Development
 
