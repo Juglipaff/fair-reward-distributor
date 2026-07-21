@@ -396,6 +396,11 @@
         "name": "fromStake",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "fromExcess",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"

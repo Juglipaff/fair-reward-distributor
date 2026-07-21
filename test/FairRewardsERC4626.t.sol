@@ -196,8 +196,8 @@ contract FairRewardsERC4626Test is Test {
      * @return Total assets that would be withdrawn.
      */
     function _previewRedeemFor(uint256 shares, address owner) internal view returns (uint256) {
-        (uint256 fromReward, uint256 fromStake) = vault.previewRedeemFor(shares, owner);
-        return fromReward + fromStake;
+        (uint256 fromReward, uint256 fromStake, uint256 fromExcess) = vault.previewRedeemFor(shares, owner);
+        return fromReward + fromStake + fromExcess;
     }
 
     // ============ Constructor ============
@@ -1006,9 +1006,10 @@ contract FairRewardsERC4626Test is Test {
      * @param stakeAmount Fuzzed principal deposit near the uint128 upper bound.
      * @param rewardAmount Fuzzed distribution that inflates redeemable assets past uint128.
      */
-    function testFuzz_Transfer_LargePosition_CreditsAndConsumesUserRewardBucket(uint128 stakeAmount, uint128 rewardAmount)
-        public
-    {
+    function testFuzz_Transfer_LargePosition_CreditsAndConsumesUserRewardBucket(
+        uint128 stakeAmount,
+        uint128 rewardAmount
+    ) public {
         stakeAmount = uint128(bound(stakeAmount, type(uint128).max / 2, type(uint128).max));
         rewardAmount = uint128(bound(rewardAmount, type(uint128).max / 2, type(uint128).max));
 

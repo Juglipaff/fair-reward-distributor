@@ -98,7 +98,7 @@ contract FairRewardsERC4626 is ERC4626, FairRewards {
             revert ERC4626ExceededMaxRedeem(owner, shares, maxShares);
         }
 
-        (uint256 fromReward, uint256 fromStake) = previewRedeemFor(shares, owner);
+        (uint256 fromReward, uint256 fromStake,) = previewRedeemFor(shares, owner);
         uint256 assets = fromReward + fromStake;
         _withdraw(_msgSender(), receiver, owner, assets, shares);
 
@@ -126,7 +126,7 @@ contract FairRewardsERC4626 is ERC4626, FairRewards {
      * @inheritdoc ERC4626
      */
     function maxWithdraw(address owner) public view override returns (uint256) {
-        (uint256 fromReward, uint256 fromStake) = previewRedeemFor(maxRedeem(owner), owner);
+        (uint256 fromReward, uint256 fromStake,) = previewRedeemFor(maxRedeem(owner), owner);
         return Math.min(fromReward + fromStake, _maxWithdraw(owner));
     }
 
@@ -173,36 +173,44 @@ contract FairRewardsERC4626 is ERC4626, FairRewards {
      * @inheritdoc ERC4626
      */
     function previewRedeem(uint256 shares) public view override returns (uint256) {
-        (uint256 fromReward, uint256 fromStake) = previewRedeemFor(shares, _msgSender());
-        return fromReward + fromStake;
+        (uint256 fromReward, uint256 fromStake, uint256 fromExcess) = previewRedeemFor(shares, _msgSender());
+        return fromReward + fromStake + fromExcess;
     }
 
     /**
      * @dev Allows an on-chain or off-chain user to simulate the effects of their redeem at the current block,
-     * given current on-chain conditions for a given account. The total asset amount that would be withdrawn is
-     * split across the two accounting buckets in the exact order that `_update` and `_withdraw` consume them:
-     * reward first, then principal stake. Reward aggregates both self-accrued reward (`_userReward`) and
-     * transfer-credited reward (`__userReward`). The full redeem amount equals `fromReward + fromStake`.
+     * given current on-chain conditions for a given account. The total asset amount `shares` would price to is
+     * split across three buckets in the order `_update` and `_withdraw` consume them: reward first, then
+     * principal stake, then a phantom excess bucket that only appears when `shares > balanceOf(owner)` (i.e. the
+     * caller is asking about more shares than the owner actually holds). The full priced amount equals
+     * `fromReward + fromStake + fromExcess`; only `fromReward + fromStake` corresponds to assets that could
+     * actually be moved — `fromExcess` is unrealizable and would cause the underlying `redeem` to revert.
      * @param shares Amount of Vault shares to burn.
      * @param owner Account to query the amount of assets for.
-     * @return fromReward Assets drawn from the reward bucket. Equals `min(totalAssets, ownerTotalReward)`.
-     * @return fromStake Assets drawn from the principal stake bucket. Equals `totalAssets - fromReward`.
+     * @return fromReward Assets drawn from the reward bucket. Bounded by owner's total reward.
+     * @return fromStake Assets drawn from the principal stake bucket. Bounded by owner's stake.
+     * @return fromExcess Priced assets beyond owner's position. Nonzero only when `shares > balanceOf(owner)`.
      */
     function previewRedeemFor(uint256 shares, address owner)
         public
         view
         virtual
-        returns (uint256 fromReward, uint256 fromStake)
+        returns (uint256 fromReward, uint256 fromStake, uint256 fromExcess)
     {
         uint256 balance = balanceOf(owner);
-        if (balance == 0) return (0, 0);
+        if (balance == 0) return (0, 0, 0);
 
         uint256 stake = _userStake(owner);
         uint192 reward = _userReward(owner) + __userReward[owner];
-        uint256 assets = Math.mulDiv(shares, stake + reward, balance);
+        uint256 total = stake + reward;
+        uint256 assets = Math.mulDiv(shares, total, balance);
 
-        fromReward = Math.min(assets, reward);
-        unchecked { fromStake = assets - fromReward; } // forgefmt: disable-line
+        uint256 owned = Math.min(assets, total);
+        fromReward = Math.min(owned, reward);
+        unchecked {
+            fromStake = owned - fromReward;
+            fromExcess = assets - owned;
+        }
     }
 
     // ============ Internal Write Functions ============
@@ -212,7 +220,7 @@ contract FairRewardsERC4626 is ERC4626, FairRewards {
      */
     function _update(address from, address to, uint256 value) internal virtual override {
         if (from != address(0)) {
-            (uint256 fromReward, uint256 fromStake) = previewRedeemFor(value, from);
+            (uint256 fromReward, uint256 fromStake,) = previewRedeemFor(value, from);
 
             uint256 rewardRemaining = fromReward;
             if (rewardRemaining > 0) {
