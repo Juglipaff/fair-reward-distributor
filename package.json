@@ -1,6 +1,6 @@
 {
   "name": "@juglipaff/fair-rewards",
-  "version": "5.0.3",
+  "version": "5.0.4",
   "description": "Constant-gas, deposit-age-weighted, front-run-resistant on-chain reward distribution.",
   "license": "MIT",
   "author": "Ivan Menshchikov <juglipaff@gmail.com>",

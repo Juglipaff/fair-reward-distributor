@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.0.4](https://github.com/Juglipaff/fair-rewards/compare/v5.0.3...v5.0.4) (2026-07-21)
+
+
+### Bug Fixes
+
+* propagate stake and reward on share transfers ([#23](https://github.com/Juglipaff/fair-rewards/issues/23)) ([519e3f4](https://github.com/Juglipaff/fair-rewards/commit/519e3f4e59e94469f58db6f9807465c0cd4f0c10))
+
 ## [5.0.3](https://github.com/Juglipaff/fair-rewards/compare/v5.0.2...v5.0.3) (2026-07-17)
 
 
