@@ -251,4 +251,88 @@ contract FairRewardsERC4626GasTest is Test {
         vault.previewRedeem(STAKE);
         vm.stopSnapshotGas();
     }
+
+    // ============ Transfer ============
+
+    /**
+     * @dev `transfer` to a fresh account with no pending reward. Baseline share-move cost.
+     */
+    function test_Gas_Transfer_ToFreshAccount_NoReward() public {
+        _fund(alice, STAKE);
+        vm.prank(alice);
+        vault.deposit(STAKE, alice);
+        vm.roll(GENESIS_BLOCK + 100);
+
+        uint256 amount = STAKE / 2;
+        vm.prank(alice);
+        vm.startSnapshotGas("transfer_fresh_no_reward");
+        vault.transfer(bob, amount);
+        vm.stopSnapshotGas();
+    }
+
+    /**
+     * @dev `transfer` to a fresh account after a distribution. Forces reward settlement on sender
+     *      and stake credit on receiver via the `_update` hook.
+     */
+    function test_Gas_Transfer_ToFreshAccount_AfterDistribution() public {
+        _fund(alice, STAKE);
+        vm.prank(alice);
+        vault.deposit(STAKE, alice);
+        vm.roll(GENESIS_BLOCK + 100);
+        _fund(carol, REWARD);
+        vm.prank(carol);
+        vault.distribute(REWARD);
+        vm.roll(GENESIS_BLOCK + 200);
+
+        uint256 amount = STAKE / 2;
+        vm.prank(alice);
+        vm.startSnapshotGas("transfer_fresh_after_distribution");
+        vault.transfer(bob, amount);
+        vm.stopSnapshotGas();
+    }
+
+    /**
+     * @dev `transfer` to an existing staker after a distribution. Both sides settle reward state.
+     */
+    function test_Gas_Transfer_ToExistingStaker_AfterDistribution() public {
+        _fund(alice, STAKE);
+        vm.prank(alice);
+        vault.deposit(STAKE, alice);
+        _fund(bob, STAKE);
+        vm.prank(bob);
+        vault.deposit(STAKE, bob);
+        vm.roll(GENESIS_BLOCK + 100);
+        _fund(carol, REWARD);
+        vm.prank(carol);
+        vault.distribute(REWARD);
+        vm.roll(GENESIS_BLOCK + 200);
+
+        uint256 amount = STAKE / 2;
+        vm.prank(alice);
+        vm.startSnapshotGas("transfer_existing_after_distribution");
+        vault.transfer(bob, amount);
+        vm.stopSnapshotGas();
+    }
+
+    /**
+     * @dev `transferFrom` after a distribution. Adds the allowance SSTORE on top of the transfer hook.
+     */
+    function test_Gas_TransferFrom_AfterDistribution() public {
+        _fund(alice, STAKE);
+        vm.prank(alice);
+        vault.deposit(STAKE, alice);
+        vm.roll(GENESIS_BLOCK + 100);
+        _fund(carol, REWARD);
+        vm.prank(carol);
+        vault.distribute(REWARD);
+        vm.roll(GENESIS_BLOCK + 200);
+        vm.prank(alice);
+        vault.approve(carol, STAKE);
+
+        uint256 amount = STAKE / 2;
+        vm.prank(carol);
+        vm.startSnapshotGas("transferFrom_after_distribution");
+        vault.transferFrom(alice, bob, amount);
+        vm.stopSnapshotGas();
+    }
 }

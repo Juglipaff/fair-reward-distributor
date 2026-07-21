@@ -24,6 +24,12 @@ import { FairRewards } from "./FairRewards.sol";
  */
 contract FairRewardsERC4626 is ERC4626, FairRewards {
     using SafeCast for uint256;
+    using SafeCast for uint192;
+
+    // ============ Storage ============
+
+    ///@dev Reward that was transfered to owner, but not accounted for in _userReward(owner).
+    mapping(address owner => uint192) private __userReward;
 
     // ============ Events ============
 
@@ -92,7 +98,8 @@ contract FairRewardsERC4626 is ERC4626, FairRewards {
             revert ERC4626ExceededMaxRedeem(owner, shares, maxShares);
         }
 
-        uint256 assets = previewRedeemFor(shares, owner);
+        (uint256 fromReward, uint256 fromStake) = previewRedeemFor(shares, owner);
+        uint256 assets = fromReward + fromStake;
         _withdraw(_msgSender(), receiver, owner, assets, shares);
 
         return assets;
@@ -119,7 +126,8 @@ contract FairRewardsERC4626 is ERC4626, FairRewards {
      * @inheritdoc ERC4626
      */
     function maxWithdraw(address owner) public view override returns (uint256) {
-        return Math.min(previewRedeemFor(maxRedeem(owner), owner), _maxWithdraw(owner));
+        (uint256 fromReward, uint256 fromStake) = previewRedeemFor(maxRedeem(owner), owner);
+        return Math.min(fromReward + fromStake, _maxWithdraw(owner));
     }
 
     /**
@@ -152,61 +160,93 @@ contract FairRewardsERC4626 is ERC4626, FairRewards {
      * @return Amount of Vault shares that would be burned in a withdraw call in the same transaction.
      */
     function previewWithdrawFor(uint256 assets, address owner) public view virtual returns (uint256) {
-        uint256 userStake;
-        unchecked {
-            userStake = uint256(_userStake(owner)) + _userReward(owner);
-            if (userStake == 0) return 0;
-        }
-        return Math.mulDiv(assets, balanceOf(owner), userStake);
+        uint256 balance = balanceOf(owner);
+        if (balance == 0) return 0;
+
+        uint256 userStake_ = uint256(_userStake(owner)) + _userReward(owner) + __userReward[owner];
+        if (userStake_ == 0) return 0;
+
+        return Math.mulDiv(assets, balance, userStake_);
     }
 
     /**
      * @inheritdoc ERC4626
      */
     function previewRedeem(uint256 shares) public view override returns (uint256) {
-        return previewRedeemFor(shares, _msgSender());
+        (uint256 fromReward, uint256 fromStake) = previewRedeemFor(shares, _msgSender());
+        return fromReward + fromStake;
     }
 
     /**
      * @dev Allows an on-chain or off-chain user to simulate the effects of their redeem at the current block,
-     * given current on-chain conditions for a given account.
+     * given current on-chain conditions for a given account. The total asset amount that would be withdrawn is
+     * split across the two accounting buckets in the exact order that `_update` and `_withdraw` consume them:
+     * reward first, then principal stake. Reward aggregates both self-accrued reward (`_userReward`) and
+     * transfer-credited reward (`__userReward`). The full redeem amount equals `fromReward + fromStake`.
      * @param shares Amount of Vault shares to burn.
      * @param owner Account to query the amount of assets for.
-     * @return Amount of assets that would be withdrawn in a redeem call in the same transaction.
+     * @return fromReward Assets drawn from the reward bucket. Equals `min(totalAssets, ownerTotalReward)`.
+     * @return fromStake Assets drawn from the principal stake bucket. Equals `totalAssets - fromReward`.
      */
-    function previewRedeemFor(uint256 shares, address owner) public view virtual returns (uint256) {
+    function previewRedeemFor(uint256 shares, address owner)
+        public
+        view
+        virtual
+        returns (uint256 fromReward, uint256 fromStake)
+    {
         uint256 balance = balanceOf(owner);
-        if (balance == 0) return 0;
-        unchecked { return Math.mulDiv(shares, uint256(_userStake(owner)) + _userReward(owner), balance); } // forgefmt: disable-line
+        if (balance == 0) return (0, 0);
+
+        uint256 stake = _userStake(owner);
+        uint192 reward = _userReward(owner) + __userReward[owner];
+        uint256 assets = Math.mulDiv(shares, stake + reward, balance);
+
+        fromReward = Math.min(assets, reward);
+        unchecked { fromStake = assets - fromReward; } // forgefmt: disable-line
     }
 
     // ============ Internal Write Functions ============
 
     /**
-     * @inheritdoc ERC4626
+     * @inheritdoc ERC20
      */
-    function _deposit(address caller, address receiver, uint256 assets, uint256 shares) internal virtual override {
-        super._deposit(caller, receiver, assets, shares);
-        _stake(assets.toUint128(), receiver);
-    }
+    function _update(address from, address to, uint256 value) internal virtual override {
+        if (from != address(0)) {
+            (uint256 fromReward, uint256 fromStake) = previewRedeemFor(value, from);
 
-    /**
-     * @inheritdoc ERC4626
-     */
-    function _withdraw(address caller, address receiver, address owner, uint256 assets, uint256 shares)
-        internal
-        virtual
-        override
-    {
-        super._withdraw(caller, receiver, owner, assets, shares);
+            uint256 rewardRemaining = fromReward;
+            if (rewardRemaining > 0) {
+                uint192 toCollect = uint192(Math.min(__userReward[from], rewardRemaining));
+                if (toCollect > 0) {
+                    unchecked {
+                        rewardRemaining -= toCollect;
+                        __userReward[from] -= toCollect;
+                    }
+                }
 
-        uint192 userReward = _userReward(owner);
-        uint192 toCollect = uint192(Math.min(userReward, assets));
-        uint128 toWithdraw;
-        unchecked { toWithdraw = (assets - toCollect).toUint128(); } // forgefmt: disable-line
+                if (rewardRemaining > 0) {
+                    toCollect = uint192(Math.min(_userReward(from), rewardRemaining));
+                    if (toCollect > 0) _collectReward(toCollect, from);
+                }
+            }
 
-        _collectReward(toCollect, owner);
-        if (toWithdraw > 0) _withdraw(toWithdraw, owner);
+            if (fromStake > 0) _withdraw(fromStake.toUint128(), from);
+
+            if (to != address(0)) {
+                uint256 assets = fromReward + fromStake;
+                uint128 stake = uint128(Math.min(assets, type(uint128).max));
+                _stake(stake, to);
+
+                unchecked {
+                    uint192 reward = uint192(assets - stake);
+                    if (reward > 0) __userReward[to] += reward;
+                }
+            }
+        } else if (to != address(0)) {
+            _stake(previewMint(value).toUint128(), to);
+        }
+
+        super._update(from, to, value);
     }
 
     /**

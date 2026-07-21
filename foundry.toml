@@ -3,6 +3,8 @@ src = "src"
 out = "out"
 libs = ["lib"]
 solc_version = "0.8.35"
+optimizer = true
+optimizer_runs = 4294967295
 no_match_coverage = "(test|script)/"
 
 [profile.ci]

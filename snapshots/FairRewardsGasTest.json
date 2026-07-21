@@ -1,12 +1,12 @@
 {
-  "collectReward_after_distribution": "47931",
-  "collectReward_cached": "5316",
-  "distribute_single_staker": "50920",
-  "distribute_two_stakers": "50920",
-  "stake_add_to_existing": "28594",
-  "stake_first": "51909",
-  "userReward_cached": "2321",
-  "userReward_unsettled": "4247",
-  "withdraw_after_distribution": "48366",
-  "withdraw_from_stake": "28451"
+  "collectReward_after_distribution": "45602",
+  "collectReward_cached": "3659",
+  "distribute_single_staker": "49576",
+  "distribute_two_stakers": "49576",
+  "stake_add_to_existing": "26641",
+  "stake_first": "49284",
+  "userReward_cached": "1351",
+  "userReward_unsettled": "2803",
+  "withdraw_after_distribution": "45877",
+  "withdraw_from_stake": "26634"
 }

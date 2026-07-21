@@ -79,6 +79,34 @@ contract MockVault2x is FairRewardsERC4626 {
 }
 
 /**
+ * @title MockVaultForcedBalance
+ * @dev Overrides `balanceOf` to return a fixed nonzero value regardless of ERC20 state, without
+ *      touching FairRewards accounting. Lets tests reach the `userStake_ == 0` early-return branch
+ *      in `previewWithdrawFor` — reachable only when a subclass decouples balance from stake.
+ */
+contract MockVaultForcedBalance is FairRewardsERC4626 {
+    /**
+     * @dev Deploys the mock with the given vault metadata and underlying asset.
+     * @param name_ Name of Vault share token to set.
+     * @param symbol_ Symbol of Vault share token to set.
+     * @param asset_ Asset to use as underlying.
+     */
+    constructor(string memory name_, string memory symbol_, IERC20 asset_)
+        FairRewardsERC4626(name_, symbol_, asset_)
+    { }
+
+    /**
+     * @dev Forces a nonzero balance for any address, bypassing ERC20 storage.
+     * @param account Account whose balance is being queried.
+     * @return Fixed nonzero balance.
+     */
+    function balanceOf(address account) public pure override(ERC20, IERC20) returns (uint256) {
+        account;
+        return 1 ether;
+    }
+}
+
+/**
  * @title FairRewardsERC4626Test
  * @dev Unit tests for the ERC4626 wrapper. Uses a 1:1 mock ERC20 asset so preview and conversion
  *      results can be checked against exact expected values.
@@ -159,6 +187,17 @@ contract FairRewardsERC4626Test is Test {
         _fund(user, amount);
         vm.prank(user);
         vault.distribute(amount);
+    }
+
+    /**
+     * @dev Sums the two-bucket split returned by `previewRedeemFor` into a single asset amount.
+     * @param shares Shares to preview.
+     * @param owner Position owner.
+     * @return Total assets that would be withdrawn.
+     */
+    function _previewRedeemFor(uint256 shares, address owner) internal view returns (uint256) {
+        (uint256 fromReward, uint256 fromStake) = vault.previewRedeemFor(shares, owner);
+        return fromReward + fromStake;
     }
 
     // ============ Constructor ============
@@ -350,7 +389,7 @@ contract FairRewardsERC4626Test is Test {
 
         uint256 vaultAssets = asset.balanceOf(address(vault));
         uint256 aliceShares = vault.balanceOf(alice);
-        uint256 preview = vault.previewRedeemFor(aliceShares, alice);
+        uint256 preview = _previewRedeemFor(aliceShares, alice);
 
         assertLe(preview, vaultAssets);
         assertApproxEqRel(preview, 90 ether, REWARD_TOLERANCE);
@@ -443,7 +482,7 @@ contract FairRewardsERC4626Test is Test {
         vault.redeem(50 ether, alice, alice);
 
         uint256 vaultAssets = asset.balanceOf(address(vault));
-        uint256 preview = vault.previewRedeemFor(vault.balanceOf(alice), alice);
+        uint256 preview = _previewRedeemFor(vault.balanceOf(alice), alice);
 
         assertLe(preview, vaultAssets);
         assertApproxEqRel(preview, vaultAssets, REWARD_TOLERANCE);
@@ -622,7 +661,7 @@ contract FairRewardsERC4626Test is Test {
         _distributeAs(bob, 10 ether);
         vm.roll(GENESIS_BLOCK + 20);
 
-        uint256 assets = vault.previewRedeemFor(100 ether, alice);
+        uint256 assets = _previewRedeemFor(100 ether, alice);
         assertApproxEqRel(assets, 110 ether, REWARD_TOLERANCE);
     }
 
@@ -631,7 +670,7 @@ contract FairRewardsERC4626Test is Test {
     }
 
     function test_PreviewRedeemFor_NonHolder_ReturnsZero() public view {
-        assertEq(vault.previewRedeemFor(1 ether, alice), 0);
+        assertEq(_previewRedeemFor(1 ether, alice), 0);
     }
 
     function test_PreviewWithdraw_NonHolder_ReturnsZero() public {
@@ -764,6 +803,267 @@ contract FairRewardsERC4626Test is Test {
 
     function testFuzz_ConvertToAssets_Identity(uint256 shares) public view {
         assertEq(vault.convertToAssets(shares), shares);
+    }
+
+    // ============ Transfer ============
+    // Expected behavior: shares are the ownership unit of the underlying position.
+    // Transferring N shares must transfer N units of the position (principal + accrued reward + future accrual rights).
+
+    /**
+     * @dev Full transfer of shares must move the entire redeemable position to the receiver and leave sender empty.
+     */
+    function test_Transfer_FullBalance_MovesRedeemableToReceiver() public {
+        _depositAs(alice, 100 ether);
+
+        vm.prank(alice);
+        vault.transfer(bob, 100 ether);
+
+        assertEq(vault.balanceOf(alice), 0, "alice shares");
+        assertEq(vault.balanceOf(bob), 100 ether, "bob shares");
+        assertEq(_previewRedeemFor(100 ether, alice), 0, "alice redeemable");
+        assertEq(_previewRedeemFor(100 ether, bob), 100 ether, "bob redeemable");
+        assertEq(vault.maxWithdraw(alice), 0, "alice maxWithdraw");
+        assertEq(vault.maxWithdraw(bob), 100 ether, "bob maxWithdraw");
+    }
+
+    /**
+     * @dev After a full transfer, receiver can withdraw the underlying assets; sender cannot.
+     */
+    function test_Transfer_FullBalance_ReceiverCanWithdrawAll() public {
+        _depositAs(alice, 100 ether);
+
+        vm.prank(alice);
+        vault.transfer(bob, 100 ether);
+
+        vm.prank(bob);
+        uint256 assets = vault.redeem(100 ether, bob, bob);
+
+        assertEq(assets, 100 ether);
+        assertEq(asset.balanceOf(bob), 100 ether);
+    }
+
+    /**
+     * @dev After a full transfer, sender's redeem must return zero assets (no position left).
+     */
+    function test_Transfer_FullBalance_SenderCannotWithdraw() public {
+        _depositAs(alice, 100 ether);
+
+        vm.prank(alice);
+        vault.transfer(bob, 100 ether);
+
+        assertEq(vault.maxRedeem(alice), 0);
+    }
+
+    /**
+     * @dev Partial transfer must split the position proportionally by share count.
+     */
+    function test_Transfer_Partial_SplitsPositionProportionally() public {
+        _depositAs(alice, 100 ether);
+
+        vm.prank(alice);
+        vault.transfer(bob, 40 ether);
+
+        assertEq(vault.balanceOf(alice), 60 ether);
+        assertEq(vault.balanceOf(bob), 40 ether);
+        assertEq(_previewRedeemFor(60 ether, alice), 60 ether, "alice redeemable");
+        assertEq(_previewRedeemFor(40 ether, bob), 40 ether, "bob redeemable");
+    }
+
+    /**
+     * @dev After transfer, a distribution must accrue rewards to the receiver (new share owner), not the sender.
+     */
+    function test_Transfer_ThenDistribute_RewardsGoToReceiver() public {
+        _depositAs(alice, 100 ether);
+        vm.prank(alice);
+        vault.transfer(bob, 100 ether);
+
+        vm.roll(GENESIS_BLOCK + 10);
+        _distributeAs(carol, 50 ether);
+        vm.roll(GENESIS_BLOCK + 20);
+
+        vm.prank(bob);
+        uint256 bobAssets = vault.redeem(100 ether, bob, bob);
+
+        assertApproxEqRel(bobAssets, 150 ether, REWARD_TOLERANCE);
+        assertEq(vault.maxRedeem(alice), 0);
+    }
+
+    /**
+     * @dev Transfer of accrued position after a distribution: receiver gets shares + share of pending reward
+     *      proportional to the transferred share count.
+     */
+    function test_Transfer_AfterDistribute_PositionIncludesPendingReward() public {
+        _depositAs(alice, 100 ether);
+        vm.roll(GENESIS_BLOCK + 10);
+        _distributeAs(bob, 50 ether);
+        vm.roll(GENESIS_BLOCK + 20);
+
+        uint256 aliceRedeemableBefore = _previewRedeemFor(100 ether, alice);
+        assertApproxEqRel(aliceRedeemableBefore, 150 ether, REWARD_TOLERANCE);
+
+        vm.prank(alice);
+        vault.transfer(carol, 100 ether);
+
+        assertEq(_previewRedeemFor(100 ether, alice), 0, "alice redeemable after xfer");
+        assertApproxEqRel(
+            _previewRedeemFor(100 ether, carol), aliceRedeemableBefore, REWARD_TOLERANCE, "carol redeemable"
+        );
+    }
+
+    /**
+     * @dev transferFrom with allowance: same ownership-move semantics as transfer.
+     */
+    function test_TransferFrom_MovesPositionToReceiver() public {
+        _depositAs(alice, 100 ether);
+
+        vm.prank(alice);
+        vault.approve(carol, 100 ether);
+        vm.prank(carol);
+        vault.transferFrom(alice, bob, 100 ether);
+
+        assertEq(vault.balanceOf(alice), 0);
+        assertEq(vault.balanceOf(bob), 100 ether);
+        assertEq(_previewRedeemFor(100 ether, bob), 100 ether);
+    }
+
+    /**
+     * @dev Total staked assets must be invariant under transfers (no assets created or destroyed).
+     */
+    function test_Transfer_TotalAssetsInvariant() public {
+        _depositAs(alice, 100 ether);
+        uint256 totalBefore = vault.totalAssets();
+
+        vm.prank(alice);
+        vault.transfer(bob, 40 ether);
+
+        assertEq(vault.totalAssets(), totalBefore);
+    }
+
+    /**
+     * @dev Transfer to self must be a no-op on the position.
+     */
+    function test_Transfer_ToSelf_Noop() public {
+        _depositAs(alice, 100 ether);
+
+        vm.prank(alice);
+        vault.transfer(alice, 100 ether);
+
+        assertEq(vault.balanceOf(alice), 100 ether);
+        assertEq(_previewRedeemFor(100 ether, alice), 100 ether);
+    }
+
+    /**
+     * @dev Chained transfer: sender first receives a credited-reward slice via an incoming transfer,
+     *      then forwards it out. Exercises the `__userReward[from] > 0` consumption path in `_update`.
+     */
+    function test_Transfer_ChainedFromCreditedReward_ForwardsRewardSlice() public {
+        _depositAs(alice, 100 ether);
+        vm.roll(GENESIS_BLOCK + 10);
+        _distributeAs(bob, 50 ether);
+        vm.roll(GENESIS_BLOCK + 20);
+
+        vm.prank(alice);
+        vault.transfer(bob, 100 ether);
+
+        vm.prank(bob);
+        vault.transfer(carol, 100 ether);
+
+        assertEq(vault.balanceOf(bob), 0);
+        assertEq(vault.balanceOf(carol), 100 ether);
+        assertApproxEqRel(_previewRedeemFor(100 ether, carol), 150 ether, REWARD_TOLERANCE);
+
+        vm.prank(carol);
+        uint256 assets = vault.redeem(100 ether, carol, carol);
+        assertApproxEqRel(assets, 150 ether, REWARD_TOLERANCE);
+    }
+
+    /**
+     * @dev Partial chained transfer: consumes only part of `__userReward[from]`, verifying the
+     *      decrement branch inside `_update`.
+     */
+    function test_Transfer_ChainedFromCreditedReward_PartialForward() public {
+        _depositAs(alice, 100 ether);
+        vm.roll(GENESIS_BLOCK + 10);
+        _distributeAs(bob, 50 ether);
+        vm.roll(GENESIS_BLOCK + 20);
+
+        vm.prank(alice);
+        vault.transfer(bob, 100 ether);
+
+        vm.prank(bob);
+        vault.transfer(carol, 40 ether);
+
+        assertEq(vault.balanceOf(bob), 60 ether);
+        assertEq(vault.balanceOf(carol), 40 ether);
+        assertApproxEqRel(_previewRedeemFor(60 ether, bob), 90 ether, REWARD_TOLERANCE);
+        assertApproxEqRel(_previewRedeemFor(40 ether, carol), 60 ether, REWARD_TOLERANCE);
+    }
+
+    /**
+     * @dev Position larger than uint128 max forces the transferred asset amount to overflow the
+     *      stake cap in `_update`, seating the excess in `__userReward[to]`. A subsequent transfer
+     *      from that receiver then exercises the `__userReward[from]` consumption branch.
+     * @param stakeAmount Fuzzed principal deposit near the uint128 upper bound.
+     * @param rewardAmount Fuzzed distribution that inflates redeemable assets past uint128.
+     */
+    function testFuzz_Transfer_LargePosition_CreditsAndConsumesUserRewardBucket(uint128 stakeAmount, uint128 rewardAmount)
+        public
+    {
+        stakeAmount = uint128(bound(stakeAmount, type(uint128).max / 2, type(uint128).max));
+        rewardAmount = uint128(bound(rewardAmount, type(uint128).max / 2, type(uint128).max));
+
+        asset.mint(alice, stakeAmount);
+        vm.prank(alice);
+        asset.approve(address(vault), type(uint256).max);
+        vm.prank(alice);
+        vault.deposit(stakeAmount, alice);
+
+        vm.roll(GENESIS_BLOCK + 10);
+        asset.mint(bob, rewardAmount);
+        vm.prank(bob);
+        asset.approve(address(vault), type(uint256).max);
+        vm.prank(bob);
+        vault.distribute(rewardAmount);
+        vm.roll(GENESIS_BLOCK + 20);
+
+        vm.prank(alice);
+        vault.transfer(carol, stakeAmount);
+
+        vm.prank(carol);
+        vault.transfer(bob, stakeAmount);
+
+        assertEq(vault.balanceOf(carol), 0);
+        assertEq(vault.balanceOf(bob), stakeAmount);
+    }
+}
+
+/**
+ * @title FairRewardsERC4626ForcedBalanceTest
+ * @dev Covers the `userStake_ == 0` early-return branch in `previewWithdrawFor`, reachable only
+ *      when a subclass decouples `balanceOf` from FairRewards stake accounting.
+ */
+contract FairRewardsERC4626ForcedBalanceTest is Test {
+    ///@dev Contract under test.
+    MockVaultForcedBalance internal vault;
+    ///@dev Underlying asset.
+    MockAsset internal asset;
+    ///@dev Test user Alice.
+    address internal alice = address(0xA11CE);
+
+    /**
+     * @dev Deploys the mock asset and the forced-balance vault.
+     */
+    function setUp() public {
+        asset = new MockAsset();
+        vault = new MockVaultForcedBalance("Vault Share", "vMCK", IERC20(address(asset)));
+    }
+
+    /**
+     * @dev `previewWithdrawFor` returns 0 when `balanceOf(owner) > 0` but stake + reward is 0.
+     */
+    function test_PreviewWithdrawFor_ZeroStakeWithNonzeroBalance_ReturnsZero() public view {
+        assertGt(vault.balanceOf(alice), 0);
+        assertEq(vault.previewWithdrawFor(1 ether, alice), 0);
     }
 }
 

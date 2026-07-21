@@ -1,12 +1,16 @@
 {
-  "deposit_add_to_existing": "39963",
-  "deposit_first": "124972",
-  "distribute_single_staker": "57813",
-  "distribute_two_stakers": "57813",
-  "maxWithdraw_with_reward": "5828",
-  "mint_first": "125297",
-  "previewRedeem_with_reward": "5078",
-  "redeem_after_distribution": "90197",
-  "withdraw_after_distribution": "93931",
-  "withdraw_from_stake": "64525"
+  "deposit_add_to_existing": "35945",
+  "deposit_first": "120285",
+  "distribute_single_staker": "55062",
+  "distribute_two_stakers": "55062",
+  "maxWithdraw_with_reward": "6506",
+  "mint_first": "120436",
+  "previewRedeem_with_reward": "5970",
+  "redeem_after_distribution": "88807",
+  "transferFrom_after_distribution": "115226",
+  "transfer_existing_after_distribution": "104291",
+  "transfer_fresh_after_distribution": "114291",
+  "transfer_fresh_no_reward": "88452",
+  "withdraw_after_distribution": "91918",
+  "withdraw_from_stake": "63175"
 }
